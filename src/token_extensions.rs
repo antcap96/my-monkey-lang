@@ -25,7 +25,9 @@ pub trait HasPrefixOperation {
     fn prefix_parsing(self, parser: &mut Parser) -> Result<Expression, ParseError>;
 }
 
-fn prefix_operation(kind: crate::ast::PrefixOperationKind) -> impl FnOnce(&mut Parser) -> Result<Expression, ParseError> {
+fn prefix_operation(
+    kind: crate::ast::PrefixOperationKind,
+) -> impl FnOnce(&mut Parser) -> Result<Expression, ParseError> {
     move |parser| {
         let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
         Ok(Expression::PrefixOperation(
@@ -35,13 +37,31 @@ fn prefix_operation(kind: crate::ast::PrefixOperationKind) -> impl FnOnce(&mut P
     }
 }
 
+fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
+    let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+
+    let expression = parser.parse_expression(Precedence::Lowest, next_token)?;
+
+    match parser.iter.next() {
+        Some(Token::RParen) => Ok(expression),
+        Some(token) => Err(ParseError::UnexpectedToken {
+            expected: Token::RParen,
+            got: token,
+        }),
+        None => Err(ParseError::PrematureEndOfInput),
+    }
+}
+
 impl HasPrefixOperation for Token {
     fn prefix_parsing(self, parser: &mut Parser) -> Result<Expression, ParseError> {
         match self {
             Token::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
             Token::Int(val) => Ok(Expression::IntegerLiteral(val.parse()?)),
+            Token::True => Ok(Expression::BooleanLiteral(true)),
+            Token::False => Ok(Expression::BooleanLiteral(false)),
             Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
             Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
+            Token::LParen => parse_grouped_expression(parser),
             _ => Err(ParseError::NoPrefixParseError(self)),
         }
     }
