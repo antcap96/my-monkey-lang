@@ -115,10 +115,10 @@ impl<'a> Parser<'a> {
         &mut self,
         token: Token,
     ) -> Result<crate::ast::Expression, ParseError> {
-        let expression = self.parse_expression(Precedence::Lowest, token);
+        let expression = self.parse_expression(Precedence::Lowest, token)?;
 
         match self.iter.next() {
-            Some(Token::SemiColon) | None => expression,
+            Some(Token::SemiColon) | None => Ok(expression),
             Some(t) => Err(ParseError::UnexpectedToken(t)),
         }
     }
@@ -200,15 +200,17 @@ fn parse_infix_expression(
         Some(Token::Minus) => infix_operation(Token::Minus, InfixKind::Minus, left, parser),
         Some(Token::LessThan) => {
             infix_operation(Token::LessThan, InfixKind::LessThan, left, parser)
-        },
+        }
         Some(Token::GreaterThan) => {
             infix_operation(Token::GreaterThan, InfixKind::GreaterThan, left, parser)
-        },
+        }
         Some(Token::Equal) => infix_operation(Token::Equal, InfixKind::Equal, left, parser),
         Some(Token::NotEqual) => {
             infix_operation(Token::NotEqual, InfixKind::NotEqual, left, parser)
-        },
-        Some(Token::Asterisk) => infix_operation(Token::Asterisk, InfixKind::Multiply, left, parser),
+        }
+        Some(Token::Asterisk) => {
+            infix_operation(Token::Asterisk, InfixKind::Multiply, left, parser)
+        }
         Some(Token::Slash) => infix_operation(Token::Slash, InfixKind::Divide, left, parser),
         _ => Ok((left, true)),
     }
@@ -238,6 +240,16 @@ fn parse_prefix_expression(token: Token, parser: &mut Parser) -> Result<Expressi
 
 #[cfg(test)]
 mod tests {
+    #[test] 
+    fn test_expression_1() {
+        let input = "10 + 10";
+        let tokenizer = crate::lexer::Tokenizer::new(input);
+        let mut parser = crate::parser::Parser::new(tokenizer);
+
+        let program = parser.parse_program().unwrap();
+
+        assert_eq!(program.to_string(), "(10 + 10);\n")
+    }
 
     #[test]
     fn test_let_statement() {

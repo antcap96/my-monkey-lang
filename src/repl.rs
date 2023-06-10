@@ -19,6 +19,11 @@ pub fn start() -> Result<(), std::io::Error> {
         tokenizer.clone().for_each(|token| println!("{:?}", token));
         let program = crate::parser::Parser::new(tokenizer).parse_program();
 
-        dbg!(program);
+        match program {
+            Ok(program) => println!("{}", program),
+            Err(errors) => {
+                println!("{:?}", errors);
+            }
+        }
     }
 }
