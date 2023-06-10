@@ -3,7 +3,7 @@ use crate::{
     lexer::Token,
     token_extensions::HasInfixOperation,
     token_extensions::HasPrecedence,
-    token_extensions::HasPrefixOperation
+    token_extensions::HasPrefixOperation,
 };
 
 #[derive(PartialOrd, PartialEq, Debug)]
@@ -20,7 +20,7 @@ pub enum Precedence {
 #[derive(Debug)]
 pub enum ParseError {
     PrematureEndOfInput,
-    UnexpectedToken(Token),
+    UnexpectedToken { expected: Token, got: Token },
     ParseIntError(std::num::ParseIntError),
     NoPrefixParseError(Token),
 }
@@ -86,7 +86,12 @@ impl<'a> Parser<'a> {
 
         let name = match ident {
             Token::Ident(name) => name,
-            _ => return Err(ParseError::UnexpectedToken(ident)),
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: Token::Ident("".to_owned()),
+                    got: ident,
+                })
+            }
         };
 
         // TODO: Parse the expression
@@ -122,7 +127,10 @@ impl<'a> Parser<'a> {
 
         match self.iter.next() {
             Some(Token::SemiColon) | None => Ok(expression),
-            Some(t) => Err(ParseError::UnexpectedToken(t)),
+            Some(t) => Err(ParseError::UnexpectedToken {
+                expected: Token::SemiColon,
+                got: t,
+            }),
         }
     }
 
@@ -165,7 +173,6 @@ impl<'a> Parser<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -195,6 +202,25 @@ mod tests {
             ),
         ];
 
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
+
+            let program = parser.parse_program().unwrap();
+
+            assert_eq!(program.to_string(), expected)
+        }
+    }
+
+    #[test]
+    fn test_expression_precedence() {
+        let tests = vec![
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4);\n"),
+            ("(5 + 5) * 2", "((5 + 5) * 2);\n"),
+            ("2 / (5 + 5)", "(2 / (5 + 5));\n"),
+            ("-(5 + 5)", "(-(5 + 5));\n"),
+            ("!(true == true)", "(!(true == true));\n"),
+        ];
         for (input, expected) in tests {
             let tokenizer = crate::lexer::Tokenizer::new(input);
             let mut parser = crate::parser::Parser::new(tokenizer);
