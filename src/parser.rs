@@ -1,10 +1,13 @@
 use crate::{
-    ast::{Expression, Identifier, Statement},
+    ast::{Identifier, Statement},
     lexer::Token,
+    token_extensions::HasInfixOperation,
+    token_extensions::HasPrecedence,
+    token_extensions::HasPrefixOperation
 };
 
-#[derive(PartialOrd, PartialEq)]
-enum Precedence {
+#[derive(PartialOrd, PartialEq, Debug)]
+pub enum Precedence {
     Lowest = 0,
     Equals,
     LessGreater,
@@ -29,7 +32,7 @@ impl From<std::num::ParseIntError> for ParseError {
 }
 
 pub struct Parser<'a> {
-    iter: std::iter::Peekable<crate::lexer::Tokenizer<'a>>,
+    pub iter: std::iter::Peekable<crate::lexer::Tokenizer<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -123,132 +126,83 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression(
+    pub fn parse_expression(
         &mut self,
         precedence: Precedence,
         token: Token,
     ) -> Result<crate::ast::Expression, ParseError> {
-        let mut left_expression = parse_prefix_expression(token, self)?;
+        let mut left_expression = token.prefix_parsing(self)?;
 
-        let statement_continues = self
-            .iter
-            .peek()
-            .map(|token| *token != Token::SemiColon)
-            .unwrap_or(false);
-        let lower_precedence = precedence
-            < self
+        loop {
+            //TODO: do i need statement_continues? SemiColon would have Precedence::Lowest
+            let statement_ended = self
                 .iter
                 .peek()
-                .map(precedences)
+                .map(|token| *token == Token::SemiColon)
+                .unwrap_or(true);
+            let next_precedence = self
+                .iter
+                .peek()
+                .map(|token| token.precedence())
                 .unwrap_or(Precedence::Lowest);
-        while statement_continues && lower_precedence {
-            let result = parse_infix_expression(left_expression, self)?;
-            left_expression = result.0;
-            if result.1 {
+            if statement_ended || precedence >= next_precedence {
                 break;
             }
+
+            let next_token = self.iter.peek();
+            let infix_parse_function = next_token.and_then(|token| token.infix_parsing_function());
+
+            left_expression = match infix_parse_function {
+                None => break,
+                Some(parse_function) => {
+                    self.iter.next();
+                    parse_function(left_expression, self)?
+                }
+            };
         }
 
         Ok(left_expression)
     }
 }
 
-fn precedences(token: &Token) -> Precedence {
-    match token {
-        Token::Equal => Precedence::Equals,
-        Token::NotEqual => Precedence::Equals,
-        Token::LessThan => Precedence::LessGreater,
-        Token::GreaterThan => Precedence::LessGreater,
-        Token::Plus => Precedence::Sum,
-        Token::Minus => Precedence::Sum,
-        Token::Asterisk => Precedence::Product,
-        Token::Slash => Precedence::Product,
-        _ => Precedence::Lowest,
-    }
-}
-
-fn parse_infix_expression(
-    left: Expression,
-    parser: &mut Parser,
-) -> Result<(Expression, bool), ParseError> {
-    use crate::ast::InfixOperationKind as InfixKind;
-    let infix_operation = |token: Token, kind: InfixKind, left: Expression, parser: &mut Parser| {
-        let new_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
-        let new_precedence = precedences(&token);
-        Ok((
-            Expression::InfixOperation(
-                kind,
-                Box::new(left),
-                Box::new(parser.parse_expression(new_precedence, new_token)?),
-            ),
-            false,
-        ))
-    };
-
-    let infix_token = parser.iter.next_if(|token| {
-        *token == Token::Plus
-            || *token == Token::Minus
-            || *token == Token::LessThan
-            || *token == Token::GreaterThan
-            || *token == Token::Equal
-            || *token == Token::NotEqual
-            || *token == Token::Asterisk
-            || *token == Token::Slash
-    });
-    match infix_token {
-        Some(Token::Plus) => infix_operation(Token::Plus, InfixKind::Plus, left, parser),
-        Some(Token::Minus) => infix_operation(Token::Minus, InfixKind::Minus, left, parser),
-        Some(Token::LessThan) => {
-            infix_operation(Token::LessThan, InfixKind::LessThan, left, parser)
-        }
-        Some(Token::GreaterThan) => {
-            infix_operation(Token::GreaterThan, InfixKind::GreaterThan, left, parser)
-        }
-        Some(Token::Equal) => infix_operation(Token::Equal, InfixKind::Equal, left, parser),
-        Some(Token::NotEqual) => {
-            infix_operation(Token::NotEqual, InfixKind::NotEqual, left, parser)
-        }
-        Some(Token::Asterisk) => {
-            infix_operation(Token::Asterisk, InfixKind::Multiply, left, parser)
-        }
-        Some(Token::Slash) => infix_operation(Token::Slash, InfixKind::Divide, left, parser),
-        _ => Ok((left, true)),
-    }
-}
-
-fn parse_prefix_expression(token: Token, parser: &mut Parser) -> Result<Expression, ParseError> {
-    match token {
-        Token::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
-        Token::Int(val) => Ok(Expression::IntegerLiteral(val.parse()?)),
-        Token::Bang => {
-            let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
-            Ok(Expression::PrefixOperation(
-                crate::ast::PrefixOperationKind::Bang,
-                Box::new(parser.parse_expression(Precedence::Prefix, next_token)?),
-            ))
-        }
-        Token::Minus => {
-            let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
-            Ok(Expression::PrefixOperation(
-                crate::ast::PrefixOperationKind::Minus,
-                Box::new(parser.parse_expression(Precedence::Prefix, next_token)?),
-            ))
-        }
-        _ => Err(ParseError::NoPrefixParseError(token)),
-    }
-}
 
 #[cfg(test)]
 mod tests {
-    #[test] 
+    #[test]
     fn test_expression_1() {
-        let input = "10 + 10";
-        let tokenizer = crate::lexer::Tokenizer::new(input);
-        let mut parser = crate::parser::Parser::new(tokenizer);
+        let tests = vec![
+            ("-a * b", "((-a) * b);\n"),
+            ("!-a", "(!(-a));\n"),
+            ("a + b + c", "((a + b) + c);\n"),
+            ("a + b - c", "((a + b) - c);\n"),
+            ("a * b * c", "((a * b) * c);\n"),
+            ("a * b / c", "((a * b) / c);\n"),
+            ("a + b / c", "(a + (b / c));\n"),
+            (
+                "a + b * c + d / e - f",
+                "(((a + (b * c)) + (d / e)) - f);\n",
+            ),
+            ("3 + 4; -5 * 5", "(3 + 4);\n((-5) * 5);\n"),
+            ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4));\n"),
+            ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4));\n"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));\n",
+            ),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));\n",
+            ),
+        ];
 
-        let program = parser.parse_program().unwrap();
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
 
-        assert_eq!(program.to_string(), "(10 + 10);\n")
+            let program = parser.parse_program().unwrap();
+
+            assert_eq!(program.to_string(), expected)
+        }
     }
 
     #[test]
