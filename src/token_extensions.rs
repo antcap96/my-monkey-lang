@@ -1,4 +1,4 @@
-use crate::ast::Expression;
+use crate::ast::{BlockStatement, Expression};
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser, Precedence};
 pub trait HasPrecedence {
@@ -44,11 +44,80 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
 
     match parser.iter.next() {
         Some(Token::RParen) => Ok(expression),
-        Some(token) => Err(ParseError::UnexpectedToken {
-            expected: Token::RParen,
-            got: token,
-        }),
-        None => Err(ParseError::PrematureEndOfInput),
+        next @ _ => Err(ParseError::unexpected_token(Token::RParen, next)),
+    }
+}
+
+fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
+    let token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+    let condition = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
+    let mut alternative = None;
+
+    let next = parser.iter.next();
+    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+
+    let consequence = parse_block_statement(parser)?;
+
+    if let Some(Token::Else) = parser.iter.peek() {
+        parser.iter.next();
+        let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+        alternative = Some(parse_block_statement(parser)?);
+    }
+
+    Ok(Expression::IfExpression {
+        condition,
+        consequence,
+        alternative,
+    })
+}
+
+fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseError> {
+    let mut statements = Vec::new();
+
+    while let Some(token) = parser.iter.next() {
+        match token {
+            Token::RBrace => return Ok(BlockStatement { statements }),
+            _ => {
+                let statement = parser.parse_statement(token)?;
+                statements.push(statement);
+            }
+        }
+    }
+
+    Err(ParseError::PrematureEndOfInput)
+}
+
+fn parse_function_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
+    let next = parser.iter.next();
+    let Some(Token::LParen) = next else {return Err(ParseError::unexpected_token(Token::LParen, next))};
+
+    let parameters = parse_parameters(parser)?;
+
+    let next = parser.iter.next();
+    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+
+    let body = parse_block_statement(parser)?;
+
+    Ok(Expression::FunctionLiteral { parameters, body })
+}
+
+fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, ParseError> {
+    let mut identifiers = Vec::new();
+
+    loop {
+        let next = parser.iter.next();
+        match next {
+            Some(Token::Ident(name)) => identifiers.push(crate::ast::Identifier { name }),
+            Some(Token::RParen) => return Ok(identifiers), // empty parameter list or tailing comma
+            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+        }
+
+        let next = parser.iter.next();
+        match next {
+            Some(Token::Comma) => continue,
+            Some(Token::RParen) => return Ok(identifiers),
+            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+        }
     }
 }
 
@@ -62,6 +131,8 @@ impl HasPrefixOperation for Token {
             Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
             Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
             Token::LParen => parse_grouped_expression(parser),
+            Token::If => parse_if_expression(parser),
+            Token::Function => parse_function_literal(parser),
             _ => Err(ParseError::NoPrefixParseError(self)),
         }
     }
