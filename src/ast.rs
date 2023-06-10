@@ -25,6 +25,15 @@ pub enum Expression {
     BooleanLiteral(bool),
     PrefixOperation(PrefixOperationKind, Box<Expression>),
     InfixOperation(InfixOperationKind, Box<Expression>, Box<Expression>),
+    IfExpression {
+        condition: Box<Expression>,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    },
+    FunctionLiteral {
+        parameters: Vec<Identifier>,
+        body: BlockStatement,
+    },
     NotYetImplemented,
 }
 
@@ -56,6 +65,12 @@ pub struct Program {
     pub statements: Vec<Statement>,
 }
 
+#[derive(Debug)]
+pub struct BlockStatement {
+    // TODO: Could this be an expression?
+    pub statements: Vec<Statement>,
+}
+
 impl Display for LetStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "let {} = {};", self.name.name, self.value)
@@ -65,6 +80,16 @@ impl Display for LetStatement {
 impl Display for ReturnStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "return {};", self.value)
+    }
+}
+
+impl Display for BlockStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{{")?;
+        for statement in &self.statements {
+            writeln!(f, "  {}", statement)?;
+        }
+        write!(f, "}}")
     }
 }
 
@@ -79,6 +104,29 @@ impl Display for Expression {
             InfixOperation(kind, left, right) => {
                 write!(f, "({} {} {})", left, kind.to_str(), right)
             }
+            IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                write!(f, "if {} {}", condition, consequence)?;
+                if let Some(alternative) = alternative {
+                    write!(f, " else {}", alternative)?;
+                }
+                Ok(())
+            }
+            FunctionLiteral { parameters, body } => {
+                write!(
+                    f,
+                    "fn({}) {}",
+                    parameters
+                        .iter()
+                        .map(|id| id.name.as_str())
+                        .collect::<Vec<&str>>()
+                        .join(", "),
+                    body
+                )
+            }
             NotYetImplemented => write!(f, "NotYetImplemented"),
         }
     }
@@ -88,9 +136,9 @@ impl Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Statement::*;
         match self {
-            Let(stmt) => write!(f, "{}", stmt),
-            Return(stmt) => write!(f, "{}", stmt),
-            Expression(expr) => write!(f, "{}", expr),
+            Let(statement) => write!(f, "{}", statement),
+            Return(statement) => write!(f, "{}", statement),
+            Expression(expression) => write!(f, "{};", expression),
         }
     }
 }
@@ -98,7 +146,7 @@ impl Display for Statement {
 impl Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for statement in &self.statements {
-            writeln!(f, "{};", statement)?;
+            writeln!(f, "{}", statement)?;
         }
         Ok(())
     }

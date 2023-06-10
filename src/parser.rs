@@ -31,6 +31,15 @@ impl From<std::num::ParseIntError> for ParseError {
     }
 }
 
+impl ParseError {
+    pub fn unexpected_token(expected: Token, got: Option<Token>) -> ParseError {
+        match got {
+            Some(got) => ParseError::UnexpectedToken { expected, got },
+            None => ParseError::PrematureEndOfInput,
+        }
+    }
+}
+
 pub struct Parser<'a> {
     pub iter: std::iter::Peekable<crate::lexer::Tokenizer<'a>>,
 }
@@ -46,8 +55,9 @@ impl<'a> Parser<'a> {
 
         let mut errors = Vec::new();
 
-        while self.iter.peek().is_some() {
-            let maybe_statement = self.parse_statement();
+        // XXX: would some like this be possible? `for token in self.iter.by_ref() {`
+        while let Some(token) = self.iter.next() {
+            let maybe_statement = self.parse_statement(token);
             match maybe_statement {
                 Ok(statement) => {
                     statements.push(statement);
@@ -70,28 +80,24 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_statement(&mut self) -> Result<crate::ast::Statement, ParseError> {
-        let first_token = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
-        match first_token {
+    pub fn parse_statement(&mut self, token: Token) -> Result<crate::ast::Statement, ParseError> {
+        match token {
             Token::Let => Ok(Statement::Let(self.parse_let_statement()?)),
             Token::Return => Ok(Statement::Return(self.parse_return_statement()?)),
             _ => Ok(Statement::Expression(
-                self.parse_expression_statement(first_token)?,
+                self.parse_expression_statement(token)?,
             )),
         }
     }
 
     fn parse_let_statement(&mut self) -> Result<crate::ast::LetStatement, ParseError> {
-        let ident = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
-
-        let name = match ident {
-            Token::Ident(name) => name,
-            _ => {
-                return Err(ParseError::UnexpectedToken {
-                    expected: Token::Ident("".to_owned()),
-                    got: ident,
-                })
-            }
+        
+        let next = self.iter.next();
+        let Some(Token::Ident(name)) = next else {
+            Err(ParseError::unexpected_token(
+                Token::Ident("".to_owned()),
+                next,
+            ))?
         };
 
         // TODO: Parse the expression
