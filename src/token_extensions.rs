@@ -59,8 +59,8 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
 
     let consequence = parse_block_statement(parser)?;
 
-    if let Some(Token::Else) = parser.iter.peek() {
-        parser.iter.next();
+    if parser.iter.next_if(|token| *token == Token::Else).is_some() {
+        let next = parser.iter.next();
         let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
         alternative = Some(parse_block_statement(parser)?);
     }
