@@ -193,9 +193,7 @@ fn parse_call_arguments(parser: &mut Parser) -> Result<Vec<Expression>, ParseErr
 }
 
 impl HasInfixOperation for Token {
-    fn infix_parsing_function(
-        &self,
-    ) -> Option<Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expression, ParseError>>> {
+    fn infix_parsing_function(&self) -> Option<InfixFunction> {
         use crate::ast::InfixOperationKind as InfixKind;
 
         match self {
