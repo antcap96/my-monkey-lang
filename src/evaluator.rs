@@ -1,5 +1,5 @@
 use crate::ast::Expression;
-use crate::object::Object;
+use crate::object::{EvaluationError, Object, QuickReturn};
 
 // page 128
 
@@ -10,29 +10,31 @@ while functions always give just an object.
 */
 
 // TODO: should this be Rc<Object>?
-pub fn eval_program(program: crate::ast::Program) -> Object {
-    eval_statements(program.statements)
-}
+pub fn eval_program(program: crate::ast::Program) -> Result<Object, EvaluationError> {
+    let mut output = Object::Null;
+    for statement in program.statements {
+        let result = eval_statement(statement);
 
-fn eval_statements(statements: Vec<crate::ast::Statement>) -> Object {
-    let mut result = Object::Null;
-    for statement in statements {
-        result = eval_statement(statement);
+        match result {
+            Err(QuickReturn::Return(value)) => return Ok(value),
+            Err(QuickReturn::Error(error)) => return Err(error),
+            Ok(object) => output = object,
+        };
     }
-    result
+    Ok(output)
 }
 
-fn eval_statement(statement: crate::ast::Statement) -> Object {
+fn eval_statement(statement: crate::ast::Statement) -> Result<Object, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression),
         _ => todo!(),
     }
 }
 
-fn eval_expression(expression: Expression) -> Object {
+fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
     match expression {
-        Expression::IntegerLiteral(value) => Object::Integer(value),
-        Expression::BooleanLiteral(value) => Object::Boolean(value),
+        Expression::IntegerLiteral(value) => Ok(Object::Integer(value)),
+        Expression::BooleanLiteral(value) => Ok(Object::Boolean(value)),
         Expression::PrefixOperation(kind, expression) => {
             let right = eval_expression(*expression);
             eval_prefix_operation(kind, right)
@@ -42,8 +44,12 @@ fn eval_expression(expression: Expression) -> Object {
             let right = eval_expression(*right);
             eval_infix_operation(kind, left, right)
         }
-        Expression::IfExpression { condition, consequence, alternative } => {
-            let condition = eval_expression(*condition);
+        Expression::IfExpression {
+            condition,
+            consequence,
+            alternative,
+        } => {
+            let condition = eval_expression(*condition)?; //Condition can be a return statement?
             match condition {
                 Object::Boolean(value) => {
                     if value {
@@ -51,94 +57,89 @@ fn eval_expression(expression: Expression) -> Object {
                     } else if let Some(alternative) = alternative {
                         eval_block_statement(alternative)
                     } else {
-                        Object::Null
+                        Ok(Object::Null)
                     }
                 }
-                _ => Object::Null,
+                _ => Err(QuickReturn::Error(EvaluationError::NonBooleanCondition(
+                    condition,
+                ))),
             }
         }
         _ => todo!(),
     }
 }
 
-fn eval_block_statement(block: crate::ast::BlockStatement) -> Object {
-    eval_statements(block.statements)
+fn eval_block_statement(block: crate::ast::BlockStatement) -> Result<Object, QuickReturn> {
+    let mut result = Object::Null;
+    for statement in block.statements {
+        result = eval_statement(statement)?;
+    }
+    Ok(result)
 }
 
-fn eval_prefix_operation(kind: crate::ast::PrefixOperationKind, right: Object) -> Object {
-    match kind {
-        crate::ast::PrefixOperationKind::Bang => match right {
-            Object::Boolean(value) => Object::Boolean(!value),
-            _ => Object::Null,
-        },
-        crate::ast::PrefixOperationKind::Minus => match right {
-            Object::Integer(value) => Object::Integer(-value),
-            _ => Object::Null,
-        },
+fn eval_prefix_operation(
+    kind: crate::ast::PrefixOperationKind,
+    right: Result<Object, QuickReturn>,
+) -> Result<Object, QuickReturn> {
+    let right = right?;
+    match (&kind, &right) {
+        (crate::ast::PrefixOperationKind::Bang, Object::Boolean(value)) => {
+            Ok(Object::Boolean(!value))
+        }
+        (crate::ast::PrefixOperationKind::Minus, Object::Integer(value)) => {
+            Ok(Object::Integer(-value))
+        }
+        _ => Err(QuickReturn::Error(EvaluationError::UnknownPrefixOperator {
+            right: Box::new(right),
+            operation: kind,
+        })),
     }
 }
 
 fn eval_infix_operation(
     kind: crate::ast::InfixOperationKind,
-    left: Object,
-    right: Object,
-) -> Object {
+    left: Result<Object, QuickReturn>,
+    right: Result<Object, QuickReturn>,
+) -> Result<Object, QuickReturn> {
     use crate::ast::InfixOperationKind;
-    match kind {
-        InfixOperationKind::Plus => {
-            infix_integer_only_operation(left, right, |left, right| Object::Integer(left + right))
+    let left = left?;
+    let right = right?;
+    match (&kind, &left, &right) {
+        (InfixOperationKind::Plus, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Integer(left + right))
         }
-        InfixOperationKind::Minus => {
-            infix_integer_only_operation(left, right, |left, right| Object::Integer(left - right))
+        (InfixOperationKind::Minus, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Integer(left - right))
         }
-        InfixOperationKind::Multiply => {
-            infix_integer_only_operation(left, right, |left, right| Object::Integer(left * right))
+        (InfixOperationKind::Multiply, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Integer(left * right))
         }
-        InfixOperationKind::Divide => {
-            infix_integer_only_operation(left, right, |left, right| Object::Integer(left / right))
+        (InfixOperationKind::Divide, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Integer(left / right))
         }
-        InfixOperationKind::LessThan => {
-            infix_integer_only_operation(left, right, |left, right| Object::Boolean(left < right))
+        (InfixOperationKind::LessThan, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Boolean(left < right))
         }
-        InfixOperationKind::GreaterThan => {
-            infix_integer_only_operation(left, right, |left, right| Object::Boolean(left > right))
+        (InfixOperationKind::GreaterThan, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Boolean(left > right))
         }
-        InfixOperationKind::Equal => infix_complete_operation(
-            left,
-            right,
-            |left, right| Object::Boolean(left == right),
-            |left, right| Object::Boolean(left == right),
-        ),
-        InfixOperationKind::NotEqual => infix_complete_operation(
-            left,
-            right,
-            |left, right| Object::Boolean(left != right),
-            |left, right| Object::Boolean(left != right),
-        ),
-    }
-}
-
-fn infix_integer_only_operation(
-    left: Object,
-    right: Object,
-    op: impl FnOnce(i64, i64) -> Object,
-) -> Object {
-    match (left, right) {
-        (Object::Integer(left), Object::Integer(right)) => op(left, right),
-        _ => Object::Null,
-    }
-}
-
-fn infix_complete_operation(
-    left: Object,
-    right: Object,
-    bool_op: impl FnOnce(bool, bool) -> Object,
-    integer_op: impl FnOnce(i64, i64) -> Object,
-) -> Object {
-    match (left, right) {
-        (Object::Boolean(left), Object::Boolean(right)) => bool_op(left, right),
-        (Object::Integer(left), Object::Integer(right)) => integer_op(left, right),
-        _ => Object::Null,
+        (InfixOperationKind::Equal, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Boolean(left == right))
+        }
+        (InfixOperationKind::NotEqual, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::Boolean(left != right))
+        }
+        (InfixOperationKind::Equal, Object::Boolean(left), Object::Boolean(right)) => {
+            Ok(Object::Boolean(left == right))
+        }
+        (InfixOperationKind::NotEqual, Object::Boolean(left), Object::Boolean(right)) => {
+            Ok(Object::Boolean(left != right))
+        }
+        _ => Err(QuickReturn::Error(EvaluationError::UnknownInfixOperator {
+            left: Box::new(left),
+            right: Box::new(right),
+            operation: kind,
+        })),
     }
 }
 
@@ -147,15 +148,15 @@ mod tests {
     use crate::{lexer::Tokenizer, object::Object, parser::Parser};
 
     #[test]
-    fn test_literals() {
+    fn big_test() {
         let inputs = vec![
-            ("--5;", Object::Integer(5)),
-            ("56;", Object::Integer(56)),
-            ("-10;", Object::Integer(-10)),
-            ("true;", Object::Boolean(true)),
-            ("false;", Object::Boolean(false)),
-            ("!false;", Object::Boolean(true)),
-            ("!!true;", Object::Boolean(true)),
+            ("--5;", Ok(Object::Integer(5))),
+            ("56;", Ok(Object::Integer(56))),
+            ("-10;", Ok(Object::Integer(-10))),
+            ("true;", Ok(Object::Boolean(true))),
+            ("false;", Ok(Object::Boolean(false))),
+            ("!false;", Ok(Object::Boolean(true))),
+            ("!!true;", Ok(Object::Boolean(true))),
         ];
 
         for (input, output) in inputs {

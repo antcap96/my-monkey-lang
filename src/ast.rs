@@ -40,7 +40,7 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum InfixOperationKind {
     Plus,
     Minus,
@@ -52,7 +52,7 @@ pub enum InfixOperationKind {
     Divide,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PrefixOperationKind {
     Minus,
     Bang,
