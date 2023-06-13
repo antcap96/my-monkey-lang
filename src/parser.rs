@@ -19,10 +19,25 @@ pub enum Precedence {
 
 #[derive(Debug)]
 pub enum ParseError {
-    PrematureEndOfInput,
-    UnexpectedToken { expected: Token, got: Token },
+    PrematureEndOfInput { expected: Expected },
+    UnexpectedToken { expected: Expected, got: Token },
     ParseIntError(std::num::ParseIntError),
     NoPrefixFunction(Token),
+}
+
+impl ParseError {
+    pub fn expected_expression() -> Self {
+        ParseError::PrematureEndOfInput {
+            expected: Expected::Expression,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Expected {
+    Token(Token),
+    Identifier,
+    Expression,
 }
 
 impl From<std::num::ParseIntError> for ParseError {
@@ -34,8 +49,20 @@ impl From<std::num::ParseIntError> for ParseError {
 impl ParseError {
     pub fn unexpected_token(expected: Token, got: Option<Token>) -> ParseError {
         match got {
+            Some(got) => ParseError::UnexpectedToken {
+                expected: Expected::Token(expected),
+                got,
+            },
+            None => ParseError::PrematureEndOfInput {
+                expected: Expected::Token(expected),
+            },
+        }
+    }
+
+    pub fn unexpected_other(expected: Expected, got: Option<Token>) -> ParseError {
+        match got {
             Some(got) => ParseError::UnexpectedToken { expected, got },
-            None => ParseError::PrematureEndOfInput,
+            None => ParseError::PrematureEndOfInput { expected },
         }
     }
 }
@@ -92,8 +119,8 @@ impl<'a> Parser<'a> {
     fn parse_let_statement(&mut self) -> Result<crate::ast::LetStatement, ParseError> {
         let next = self.iter.next();
         let Some(Token::Ident(name)) = next else {
-            Err(ParseError::unexpected_token(
-                Token::Ident("".to_owned()),
+            Err(ParseError::unexpected_other(
+                Expected::Identifier,
                 next,
             ))?
         };
@@ -103,7 +130,7 @@ impl<'a> Parser<'a> {
             Err(ParseError::unexpected_token(Token::Assign, next))?
         };
 
-        let next = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+        let next = self.iter.next().ok_or(ParseError::expected_expression())?;
         let value = self.parse_expression(Precedence::Lowest, next)?;
 
         let next = self.iter.next();
@@ -118,7 +145,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Result<crate::ast::ReturnStatement, ParseError> {
-        let next = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+        let next = self.iter.next().ok_or(ParseError::expected_expression())?;
         let value = self.parse_expression(Precedence::Lowest, next)?;
 
         let next = self.iter.next();
@@ -137,7 +164,7 @@ impl<'a> Parser<'a> {
         match self.iter.next() {
             Some(Token::SemiColon) | None => Ok(expression),
             Some(t) => Err(ParseError::UnexpectedToken {
-                expected: Token::SemiColon,
+                expected: Expected::Token(Token::SemiColon),
                 got: t,
             }),
         }
@@ -267,7 +294,10 @@ mod tests {
     fn test_conditional() {
         let tests = vec![
             ("if (x < y) { x; }", "if (x < y) {\n  x;\n};\n"),
-            ("if (x < y) { x; } else { y; }", "if (x < y) {\n  x;\n} else {\n  y;\n};\n"),
+            (
+                "if (x < y) { x; } else { y; }",
+                "if (x < y) {\n  x;\n} else {\n  y;\n};\n",
+            ),
         ];
 
         for (input, expected) in tests {

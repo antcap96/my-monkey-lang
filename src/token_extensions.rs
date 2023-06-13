@@ -1,6 +1,6 @@
 use crate::ast::{BlockStatement, Expression};
 use crate::lexer::Token;
-use crate::parser::{ParseError, Parser, Precedence};
+use crate::parser::{Expected, ParseError, Parser, Precedence};
 pub trait HasPrecedence {
     fn precedence(&self) -> Precedence;
 }
@@ -30,7 +30,10 @@ fn prefix_operation(
     kind: crate::ast::PrefixOperationKind,
 ) -> impl FnOnce(&mut Parser) -> Result<Expression, ParseError> {
     move |parser| {
-        let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+        let next_token = parser
+            .iter
+            .next()
+            .ok_or(ParseError::expected_expression())?;
         Ok(Expression::PrefixOperation(
             kind,
             Box::new(parser.parse_expression(Precedence::Prefix, next_token)?),
@@ -39,7 +42,10 @@ fn prefix_operation(
 }
 
 fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let next_token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+    let next_token = parser
+        .iter
+        .next()
+        .ok_or(ParseError::expected_expression())?;
 
     let expression = parser.parse_expression(Precedence::Lowest, next_token)?;
 
@@ -50,7 +56,10 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
 }
 
 fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let token = parser.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+    let token = parser
+        .iter
+        .next()
+        .ok_or(ParseError::expected_expression())?;
     let condition = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
     let mut alternative = None;
 
@@ -85,7 +94,9 @@ fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseErr
         }
     }
 
-    Err(ParseError::PrematureEndOfInput)
+    Err(ParseError::PrematureEndOfInput {
+        expected: Expected::Token(Token::RBrace),
+    })
 }
 
 fn parse_function_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
@@ -153,7 +164,7 @@ fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixF
             let new_token = parser
                 .iter
                 .next()
-                .ok_or(crate::parser::ParseError::PrematureEndOfInput)?;
+                .ok_or(ParseError::expected_expression())?;
             Ok(Expression::InfixOperation(
                 kind,
                 Box::new(left),
