@@ -27,8 +27,14 @@ pub fn eval_program(program: crate::ast::Program) -> Result<Object, EvaluationEr
 fn eval_statement(statement: crate::ast::Statement) -> Result<Object, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression),
+        crate::ast::Statement::Return(statement) => eval_return_statement(statement),
         _ => todo!(),
     }
+}
+
+fn eval_return_statement(statement: crate::ast::ReturnStatement) -> Result<Object, QuickReturn> {
+    let value = eval_expression(statement.value)?;
+    Err(QuickReturn::Return(value))
 }
 
 fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
@@ -49,7 +55,7 @@ fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
             consequence,
             alternative,
         } => {
-            let condition = eval_expression(*condition)?; //Condition can be a return statement?
+            let condition = eval_expression(*condition)?;
             match condition {
                 Object::Boolean(value) => {
                     if value {
