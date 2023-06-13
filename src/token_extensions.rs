@@ -45,7 +45,7 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
 
     match parser.iter.next() {
         Some(Token::RParen) => Ok(expression),
-        next @ _ => Err(ParseError::unexpected_token(Token::RParen, next)),
+        next => Err(ParseError::unexpected_token(Token::RParen, next)),
     }
 }
 
@@ -134,21 +134,18 @@ impl HasPrefixOperation for Token {
             Token::LParen => parse_grouped_expression(parser),
             Token::If => parse_if_expression(parser),
             Token::Function => parse_function_literal(parser),
-            _ => Err(ParseError::NoPrefixParseError(self)),
+            _ => Err(ParseError::NoPrefixFunction(self)),
         }
     }
 }
 
+type InfixFunction = Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expression, ParseError>>;
+
 pub trait HasInfixOperation {
-    fn infix_parsing_function(
-        &self,
-    ) -> Option<Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expression, ParseError>>>;
+    fn infix_parsing_function(&self) -> Option<InfixFunction>;
 }
 
-fn infix_operation(
-    token: Token,
-    kind: crate::ast::InfixOperationKind,
-) -> Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expression, ParseError>> {
+fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixFunction {
     Box::new(
         move |left: Expression, parser: &mut Parser| -> Result<Expression, ParseError> {
             let new_precedence = token.precedence();
