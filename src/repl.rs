@@ -20,10 +20,17 @@ pub fn start() -> Result<(), std::io::Error> {
         let program = crate::parser::Parser::new(tokenizer).parse_program();
 
         match program {
-            Ok(program) => println!("{}", program),
+            Ok(program) => {
+                println!("{}", program);
+                let object = crate::evaluator::eval_program(program);
+
+                println!("result: {:?}", object)
+            
+            },
             Err(errors) => {
                 println!("{:?}", errors);
             }
         }
+
     }
 }

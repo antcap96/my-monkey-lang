@@ -264,38 +264,19 @@ mod tests {
     }
 
     #[test]
-    fn test_let_statement() {
-        let input = "
-            let x = 5;
-            let y = 10;
-            let foobar = 838383;";
+    fn test_conditional() {
+        let tests = vec![
+            ("if (x < y) { x; }", "if (x < y) {\n  x;\n};\n"),
+            ("if (x < y) { x; } else { y; }", "if (x < y) {\n  x;\n} else {\n  y;\n};\n"),
+        ];
 
-        let tokenizer = crate::lexer::Tokenizer::new(input);
-        let mut parser = crate::parser::Parser::new(tokenizer);
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
 
-        let program = parser.parse_program().unwrap();
+            let program = parser.parse_program().unwrap();
 
-        if program.statements.len() != 3 {
-            panic!(
-                "program.statements does not contain 3 statements. got={}",
-                program.statements.len()
-            );
-        }
-
-        for (name, statement) in ["x", "y", "foobar"]
-            .iter()
-            .zip(program.statements.into_iter())
-        {
-            test_let_statement_(statement, name);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn test_let_statement_(s: crate::ast::Statement, name: &str) {
-        if let crate::ast::Statement::Let(let_statement) = s {
-            assert_eq!(let_statement.name.name, name);
-        } else {
-            panic!("s is not LET. got={:?}", s);
+            assert_eq!(program.to_string(), expected)
         }
     }
 }
