@@ -1,12 +1,16 @@
 use std::io::Write;
 
+use crate::environment;
+
 const PROMPT: &str = ">> ";
 
 pub fn start() -> Result<(), std::io::Error> {
     let mut lines = std::io::stdin().lines();
     let mut stdout = std::io::stdout().lock();
+    let mut environment = environment::Environment::new();
 
     loop {
+
         print!("\n{}", PROMPT);
         stdout.flush()?;
 
@@ -22,7 +26,7 @@ pub fn start() -> Result<(), std::io::Error> {
         match program {
             Ok(program) => {
                 println!("{}", program);
-                let object = crate::evaluator::eval_program(program);
+                let object = crate::evaluator::eval_program(program, &mut environment);
 
                 println!("result: {:?}", object)
             

@@ -1,4 +1,5 @@
 use crate::ast::Expression;
+use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
 
 // page 128
@@ -10,10 +11,13 @@ while functions always give just an object.
 */
 
 // TODO: should this be Rc<Object>?
-pub fn eval_program(program: crate::ast::Program) -> Result<Object, EvaluationError> {
+pub fn eval_program(
+    program: crate::ast::Program,
+    environment: &mut Environment,
+) -> Result<Object, EvaluationError> {
     let mut output = Object::Null;
     for statement in program.statements {
-        let result = eval_statement(statement);
+        let result = eval_statement(statement, environment);
 
         match result {
             Err(QuickReturn::Return(value)) => return Ok(value),
@@ -24,30 +28,51 @@ pub fn eval_program(program: crate::ast::Program) -> Result<Object, EvaluationEr
     Ok(output)
 }
 
-fn eval_statement(statement: crate::ast::Statement) -> Result<Object, QuickReturn> {
+fn eval_statement(
+    statement: crate::ast::Statement,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
     match statement {
-        crate::ast::Statement::Expression(expression) => eval_expression(expression),
-        crate::ast::Statement::Return(statement) => eval_return_statement(statement),
-        _ => todo!(),
+        crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
+        crate::ast::Statement::Return(statement) => eval_return_statement(statement, environment),
+        crate::ast::Statement::Let(statement) => eval_let_statement(statement, environment),
     }
 }
 
-fn eval_return_statement(statement: crate::ast::ReturnStatement) -> Result<Object, QuickReturn> {
-    let value = eval_expression(statement.value)?;
+fn eval_let_statement(
+    statement: crate::ast::LetStatement,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
+    let value = eval_expression(statement.value, environment)?;
+    environment.set(&statement.name.name, value.clone());
+    Ok(value)
+}
+
+fn eval_return_statement(
+    statement: crate::ast::ReturnStatement,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
+    let value = eval_expression(statement.value, environment)?;
     Err(QuickReturn::Return(value))
 }
 
-fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
+fn eval_expression(
+    expression: Expression,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::Integer(value)),
         Expression::BooleanLiteral(value) => Ok(Object::Boolean(value)),
+        Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
+            QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name)),
+        ),
         Expression::PrefixOperation(kind, expression) => {
-            let right = eval_expression(*expression);
+            let right = eval_expression(*expression, environment);
             eval_prefix_operation(kind, right)
         }
         Expression::InfixOperation(kind, left, right) => {
-            let left = eval_expression(*left);
-            let right = eval_expression(*right);
+            let left = eval_expression(*left, environment);
+            let right = eval_expression(*right, environment);
             eval_infix_operation(kind, left, right)
         }
         Expression::IfExpression {
@@ -55,13 +80,13 @@ fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
             consequence,
             alternative,
         } => {
-            let condition = eval_expression(*condition)?;
+            let condition = eval_expression(*condition, environment)?;
             match condition {
                 Object::Boolean(value) => {
                     if value {
-                        eval_block_statement(consequence)
+                        eval_block_statement(consequence, environment)
                     } else if let Some(alternative) = alternative {
-                        eval_block_statement(alternative)
+                        eval_block_statement(alternative, environment)
                     } else {
                         Ok(Object::Null)
                     }
@@ -75,10 +100,13 @@ fn eval_expression(expression: Expression) -> Result<Object, QuickReturn> {
     }
 }
 
-fn eval_block_statement(block: crate::ast::BlockStatement) -> Result<Object, QuickReturn> {
+fn eval_block_statement(
+    block: crate::ast::BlockStatement,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
     let mut result = Object::Null;
     for statement in block.statements {
-        result = eval_statement(statement)?;
+        result = eval_statement(statement, environment)?;
     }
     Ok(result)
 }
@@ -169,7 +197,7 @@ mod tests {
             let tokenizer = Tokenizer::new(input);
             let mut parser = Parser::new(tokenizer);
             let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(ast);
+            let result = super::eval_program(ast, &mut super::Environment::new());
 
             assert_eq!(result, output);
         }

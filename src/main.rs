@@ -5,6 +5,7 @@ mod parser;
 mod token_extensions;
 mod object;
 mod evaluator;
+mod environment;
 
 fn main() {
     repl::start().unwrap();
