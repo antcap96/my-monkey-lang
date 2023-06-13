@@ -34,7 +34,10 @@ pub enum Expression {
         parameters: Vec<Identifier>,
         body: BlockStatement,
     },
-    NotYetImplemented,
+    CallExpression {
+        function: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
 
 #[derive(Debug)]
@@ -127,7 +130,21 @@ impl Display for Expression {
                     body
                 )
             }
-            NotYetImplemented => write!(f, "NotYetImplemented"),
+            CallExpression {
+                function,
+                arguments,
+            } => {
+                write!(
+                    f,
+                    "{}({})",
+                    function,
+                    arguments
+                        .iter()
+                        .map(|arg| arg.to_string())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
         }
     }
 }

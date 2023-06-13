@@ -16,6 +16,7 @@ impl HasPrecedence for crate::lexer::Token {
             Token::Minus => Precedence::Sum,
             Token::Asterisk => Precedence::Product,
             Token::Slash => Precedence::Product,
+            Token::LParen => Precedence::Call,
             _ => Precedence::Lowest,
         }
     }
@@ -165,6 +166,35 @@ fn infix_operation(
     )
 }
 
+fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
+    let arguments = parse_call_arguments(parser)?;
+
+    Ok(Expression::CallExpression {
+        function: Box::new(left),
+        arguments,
+    })
+}
+
+fn parse_call_arguments(parser: &mut Parser) -> Result<Vec<Expression>, ParseError> {
+    let mut arguments = Vec::new();
+
+    loop {
+        let next = parser.iter.next();
+        match next {
+            Some(Token::RParen) => return Ok(arguments), // empty argument list or tailing comma
+            Some(token) => arguments.push(parser.parse_expression(Precedence::Lowest, token)?),
+            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+        }
+
+        let next = parser.iter.next();
+        match next {
+            Some(Token::Comma) => continue,
+            Some(Token::RParen) => return Ok(arguments),
+            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+        }
+    }
+}
+
 impl HasInfixOperation for Token {
     fn infix_parsing_function(
         &self,
@@ -180,6 +210,7 @@ impl HasInfixOperation for Token {
             Token::NotEqual => Some(infix_operation(Token::NotEqual, InfixKind::NotEqual)),
             Token::Asterisk => Some(infix_operation(Token::Asterisk, InfixKind::Multiply)),
             Token::Slash => Some(infix_operation(Token::Slash, InfixKind::Divide)),
+            Token::LParen => Some(Box::new(parse_call_function)),
             _ => None,
         }
     }

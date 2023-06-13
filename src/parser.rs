@@ -91,7 +91,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_let_statement(&mut self) -> Result<crate::ast::LetStatement, ParseError> {
-        
         let next = self.iter.next();
         let Some(Token::Ident(name)) = next else {
             Err(ParseError::unexpected_token(
@@ -100,30 +99,35 @@ impl<'a> Parser<'a> {
             ))?
         };
 
-        // TODO: Parse the expression
-        for token in self.iter.by_ref() {
-            match token {
-                Token::SemiColon => break,
-                _ => {}
-            }
-        }
+        let next = self.iter.next();
+        let Some(Token::Assign) = next else {
+            Err(ParseError::unexpected_token(Token::Assign, next))?
+        };
+
+        let next = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+        let value = self.parse_expression(Precedence::Lowest, next)?;
+
+        let next = self.iter.next();
+        let Some(Token::SemiColon) = next else {
+            Err(ParseError::unexpected_token(Token::SemiColon, next))?
+        };
+
         Ok(crate::ast::LetStatement {
             name: Identifier { name },
-            value: crate::ast::Expression::NotYetImplemented,
+            value,
         })
     }
 
     fn parse_return_statement(&mut self) -> Result<crate::ast::ReturnStatement, ParseError> {
-        // TODO: Parse the expression
-        for token in self.iter.by_ref() {
-            match token {
-                Token::SemiColon => break,
-                _ => {}
-            }
-        }
-        Ok(crate::ast::ReturnStatement {
-            value: crate::ast::Expression::NotYetImplemented,
-        })
+        let next = self.iter.next().ok_or(ParseError::PrematureEndOfInput)?;
+        let value = self.parse_expression(Precedence::Lowest, next)?;
+
+        let next = self.iter.next();
+        let Some(Token::SemiColon) = next else {
+            Err(ParseError::unexpected_token(Token::SemiColon, next))?
+        };
+
+        Ok(crate::ast::ReturnStatement { value })
     }
     fn parse_expression_statement(
         &mut self,
@@ -226,6 +230,29 @@ mod tests {
             ("2 / (5 + 5)", "(2 / (5 + 5));\n"),
             ("-(5 + 5)", "(-(5 + 5));\n"),
             ("!(true == true)", "(!(true == true));\n"),
+        ];
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
+
+            let program = parser.parse_program().unwrap();
+
+            assert_eq!(program.to_string(), expected)
+        }
+    }
+
+    #[test]
+    fn test_call_expression() {
+        let tests = vec![
+            ("a + add(b * c) + d", "((a + add((b * c))) + d);\n"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));\n",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g));\n",
+            ),
         ];
         for (input, expected) in tests {
             let tokenizer = crate::lexer::Tokenizer::new(input);
