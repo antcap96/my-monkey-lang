@@ -22,7 +22,7 @@ pub enum ParseError {
     PrematureEndOfInput,
     UnexpectedToken { expected: Token, got: Token },
     ParseIntError(std::num::ParseIntError),
-    NoPrefixParseError(Token),
+    NoPrefixFunction(Token),
 }
 
 impl From<std::num::ParseIntError> for ParseError {
@@ -65,9 +65,8 @@ impl<'a> Parser<'a> {
                 Err(err) => {
                     errors.push(err);
                     for token in self.iter.by_ref() {
-                        match token {
-                            Token::SemiColon => break,
-                            _ => {}
+                        if token == Token::SemiColon {
+                            break;
                         }
                     }
                 }
