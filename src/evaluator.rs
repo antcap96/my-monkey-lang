@@ -265,4 +265,81 @@ mod tests {
             assert_eq!(result, output);
         }
     }
+
+    #[test]
+    fn test_let_statements() {
+        let inputs = vec![
+            ("let a = 5; a;", Ok(Object::Integer(5))),
+            ("let a = 5 * 5; a;", Ok(Object::Integer(25))),
+            ("let a = 5; let b = a; b;", Ok(Object::Integer(5))),
+            (
+                "let a = 5; let b = a; let c = a + b + 5; c;",
+                Ok(Object::Integer(15)),
+            ),
+        ];
+
+        for (input, output) in inputs {
+            let tokenizer = Tokenizer::new(input);
+            let mut parser = Parser::new(tokenizer);
+            let ast = parser.parse_program().unwrap();
+            let result = super::eval_program(ast, &mut super::Environment::new());
+
+            assert_eq!(result, output);
+        }
+    }
+
+    #[test]
+    fn test_function_application() {
+        let inputs = vec![
+            (
+                "let identity = fn(x) { x; }; identity(5);",
+                Ok(Object::Integer(5)),
+            ),
+            (
+                "let identity = fn(x) { return x; }; identity(5);",
+                Ok(Object::Integer(5)),
+            ),
+            (
+                "let double = fn(x) { x * 2; }; double(5);",
+                Ok(Object::Integer(10)),
+            ),
+            (
+                "let add = fn(x, y) { x + y; }; add(5, 5);",
+                Ok(Object::Integer(10)),
+            ),
+            (
+                "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));",
+                Ok(Object::Integer(20)),
+            ),
+            ("fn(x) { x; }(5)", Ok(Object::Integer(5))),
+            (
+                "
+                let factorial = fn(n) {
+                    if n < 2 {1;}
+                    else {factorial(n - 1) * n;};
+                };
+                factorial(3);",
+                Ok(Object::Integer(6)),
+            ),
+            (
+                "
+                let func = fn(a) {
+                    fn(b) {
+                        a + b;
+                    };
+                };
+                func(5)(10);",
+                Ok(Object::Integer(15)),
+            ),
+        ];
+
+        for (input, output) in inputs {
+            let tokenizer = Tokenizer::new(input);
+            let mut parser = Parser::new(tokenizer);
+            let ast = parser.parse_program().unwrap();
+            let result = super::eval_program(ast, &mut super::Environment::new());
+
+            assert_eq!(result, output);
+        }
+    }
 }
