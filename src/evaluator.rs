@@ -3,13 +3,7 @@ use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
 use std::cell::RefCell;
 use std::rc::Rc;
-// page 128
 
-/**
-I'm guessing I have to split BlockStatement into a type that gives an object
-and a type that gives a returnable object. If statements have a returnable object
-while functions always give just an object.
-*/
 
 // TODO: should this be Rc<Object>?
 pub fn eval_program(
