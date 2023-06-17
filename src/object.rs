@@ -45,8 +45,9 @@ pub enum EvaluationError {
     UnknownIdentifier(String),
     NonBooleanCondition(Object),
     CallNonFunction(Object),
-    // InvalidArgumentCount {
-    //     expected: usize,
-    //     actual: usize,
-    // },
+    WrongArgumentCount {
+        function: Function,
+        expected: usize,
+        actual: usize,
+    },
 }
