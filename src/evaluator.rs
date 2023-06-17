@@ -1,7 +1,8 @@
 use crate::ast::Expression;
 use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
-
+use std::cell::RefCell;
+use std::rc::Rc;
 // page 128
 
 /**
@@ -13,7 +14,7 @@ while functions always give just an object.
 // TODO: should this be Rc<Object>?
 pub fn eval_program(
     program: crate::ast::Program,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, EvaluationError> {
     let mut output = Object::Null;
     for statement in program.statements {
@@ -30,7 +31,7 @@ pub fn eval_program(
 
 fn eval_statement(
     statement: crate::ast::Statement,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
@@ -41,16 +42,18 @@ fn eval_statement(
 
 fn eval_let_statement(
     statement: crate::ast::LetStatement,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     let value = eval_expression(statement.value, environment)?;
-    environment.set(&statement.name.name, value.clone());
+    environment
+        .borrow_mut()
+        .set(&statement.name.name, value.clone());
     Ok(value)
 }
 
 fn eval_return_statement(
     statement: crate::ast::ReturnStatement,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     let value = eval_expression(statement.value, environment)?;
     Err(QuickReturn::Return(value))
@@ -58,14 +61,19 @@ fn eval_return_statement(
 
 fn eval_expression(
     expression: Expression,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::Integer(value)),
         Expression::BooleanLiteral(value) => Ok(Object::Boolean(value)),
-        Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
-            QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name)),
-        ),
+        Expression::Identifier(identifier) => {
+            environment
+                .borrow()
+                .get(&identifier.name)
+                .ok_or(QuickReturn::Error(EvaluationError::UnknownIdentifier(
+                    identifier.name,
+                )))
+        }
         Expression::PrefixOperation(kind, expression) => {
             let right = eval_expression(*expression, environment);
             eval_prefix_operation(kind, right)
@@ -96,13 +104,60 @@ fn eval_expression(
                 ))),
             }
         }
-        _ => todo!(),
+        Expression::FunctionLiteral { parameters, body } => {
+            Ok(Object::Function(crate::object::Function {
+                parameters,
+                body,
+                env: Rc::clone(environment),
+            }))
+        }
+        Expression::CallExpression {
+            function,
+            arguments,
+        } => {
+            let function = eval_expression(*function, environment)?;
+            let Object::Function(function) = function else {
+                return Err(QuickReturn::Error(EvaluationError::CallNonFunction(
+                    function,
+                )));};
+            let arguments = eval_expressions(arguments, environment)?;
+            apply_function(function, arguments).map_err(|err| QuickReturn::Error(err))
+        }
+    }
+}
+
+fn eval_expressions(
+    arguments: Vec<Expression>,
+    environment: &mut Rc<RefCell<Environment>>,
+) -> Result<Vec<Object>, QuickReturn> {
+    let mut result = Vec::new();
+    for argument in arguments {
+        result.push(eval_expression(argument, environment)?);
+    }
+    Ok(result)
+}
+
+fn apply_function(
+    function: crate::object::Function,
+    arguments: Vec<Object>,
+) -> Result<Object, EvaluationError> {
+    let mut new_environment = Environment::new_enclosed(Rc::clone(&function.env));
+    for (parameter, argument) in function.parameters.iter().zip(arguments.iter()) {
+        new_environment
+            .borrow_mut()
+            .set(&parameter.name, argument.clone());
+    }
+    let result = eval_block_statement(function.body, &mut new_environment);
+    match result {
+        Ok(ok @ _) => Ok(ok),
+        Err(QuickReturn::Return(value)) => Ok(value),
+        Err(QuickReturn::Error(err)) => Err(err),
     }
 }
 
 fn eval_block_statement(
     block: crate::ast::BlockStatement,
-    environment: &mut Environment,
+    environment: &mut Rc<RefCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     let mut result = Object::Null;
     for statement in block.statements {
