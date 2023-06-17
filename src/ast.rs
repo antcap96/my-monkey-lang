@@ -1,24 +1,24 @@
 use std::fmt::Display;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
     Expression(Expression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LetStatement {
     pub name: Identifier,
     pub value: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ReturnStatement {
     pub value: Expression,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(i64),
@@ -40,7 +40,7 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum InfixOperationKind {
     Plus,
     Minus,
@@ -52,13 +52,13 @@ pub enum InfixOperationKind {
     Divide,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum PrefixOperationKind {
     Minus,
     Bang,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
     pub name: String,
 }
@@ -68,7 +68,7 @@ pub struct Program {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BlockStatement {
     // TODO: Could this be an expression?
     pub statements: Vec<Statement>,
