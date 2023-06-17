@@ -120,6 +120,14 @@ fn eval_expression(
                 return Err(QuickReturn::Error(EvaluationError::CallNonFunction(
                     function,
                 )));};
+            if function.parameters.len() != arguments.len() {
+                let expected = function.parameters.len();
+                return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
+                    function,
+                    expected,
+                    actual: arguments.len(),
+                }));
+            }
             let arguments = eval_expressions(arguments, environment)?;
             apply_function(function, arguments).map_err(|err| QuickReturn::Error(err))
         }
