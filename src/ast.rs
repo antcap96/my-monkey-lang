@@ -9,7 +9,7 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct LetStatement {
-    pub name: Identifier,
+    pub identifier: Identifier,
     pub value: Expression,
 }
 
@@ -76,7 +76,7 @@ pub struct BlockStatement {
 
 impl Display for LetStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "let {} = {};", self.name.name, self.value)
+        write!(f, "let {} = {};", self.identifier.name, self.value)
     }
 }
 
