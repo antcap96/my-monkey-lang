@@ -1,23 +1,37 @@
-use std::io::Write;
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
 use crate::environment;
 
 const PROMPT: &str = ">> ";
 
-pub fn start() -> Result<(), std::io::Error> {
-    let mut lines = std::io::stdin().lines();
-    let mut stdout = std::io::stdout().lock();
+pub fn start() -> Result<(), ReadlineError> {
+
     let mut environment = environment::Environment::new();
-
+    
+    let mut rl = DefaultEditor::new()?;
+    let mut content: String;
     loop {
+        let readline = rl.readline(PROMPT);
 
-        print!("\n{}", PROMPT);
-        stdout.flush()?;
-
-        let content = match lines.next() {
-            None => return Ok(()),
-            Some(x) => x?,
-        };
+        match readline {
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                continue // Clear line
+            },
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break
+            },
+            Err(err) => {
+                println!("Error: {:?}", err);
+                break
+            }
+            Ok(line) => {
+                rl.add_history_entry(line.as_str())?;
+                content = line;
+            },
+        }
 
         let tokenizer = crate::lexer::Tokenizer::new(&content);
         tokenizer.clone().for_each(|token| println!("{:?}", token));
@@ -26,7 +40,7 @@ pub fn start() -> Result<(), std::io::Error> {
         match program {
             Ok(program) => {
                 println!("{}", program);
-                let object = crate::evaluator::eval_program(program, &mut environment);
+                let object = crate::evaluator::eval_program(&program, &mut environment);
 
                 println!("result: {:?}", object)
             
@@ -35,6 +49,6 @@ pub fn start() -> Result<(), std::io::Error> {
                 println!("{:?}", errors);
             }
         }
-
     }
+    Ok(())
 }

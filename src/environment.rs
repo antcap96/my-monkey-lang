@@ -1,23 +1,23 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use gc::{Finalize, Trace, GcCell, Gc};
 
-#[derive(Debug, PartialEq, Clone)]
+
+#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
 pub struct Environment {
     store: HashMap<String, crate::object::Object>,
-    outer: Option<Rc<RefCell<Environment>>>,
+    outer: Option<Gc<GcCell<Environment>>>,
 }
 
 impl Environment {
-    pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Environment {
+    pub fn new() -> Gc<GcCell<Self>> {
+        Gc::new(GcCell::new(Environment {
             store: HashMap::new(),
             outer: None,
         }))
     }
 
-    pub fn new_enclosed(outer: Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Environment {
+    pub fn new_enclosed(outer: Gc<GcCell<Self>>) -> Gc<GcCell<Self>> {
+        Gc::new(GcCell::new(Environment {
             store: HashMap::new(),
             outer: Some(outer),
         }))

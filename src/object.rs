@@ -1,19 +1,72 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use gc::{Finalize, Trace, GcCell};
+use gc::Gc;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Object {
+#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
+pub enum ObjectCore {
     Integer(i64),
     Boolean(bool),
     Function(Function),
     Null,
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
+pub struct Object {
+    object: gc::Gc<ObjectCore>,
+}
+
+thread_local! {
+    static NULL: Object = Object {
+        object: gc::Gc::new(ObjectCore::Null),
+    };
+    static TRUE: Object = Object {
+        object: gc::Gc::new(ObjectCore::Boolean(true)),
+    };
+    static FALSE: Object = Object {
+        object: gc::Gc::new(ObjectCore::Boolean(false)),
+    };
+}
+
+impl Object {
+    pub fn null() -> Object {
+        NULL.with(|x| x.clone())
+    }
+    pub fn boolean(value: bool) -> Object {
+        if value {
+            TRUE.with(|x| x.clone())
+        } else {
+            FALSE.with(|x| x.clone())
+        }
+    }
+    pub fn integer(value: i64) -> Object {
+        Object {
+            object: gc::Gc::new(ObjectCore::Integer(value)),
+        }
+    }
+    pub fn function(
+        parameters: Vec<crate::ast::Identifier>,
+        body: crate::ast::BlockStatement,
+        env: Gc<GcCell<crate::environment::Environment>>,
+    ) -> Object {
+        Object {
+            object: gc::Gc::new(ObjectCore::Function(Function {
+                parameters,
+                body,
+                env,
+            })),
+        }
+    }
+    pub fn core_ref(&self) -> &ObjectCore {
+        &self.object
+    }
+}
+
+#[derive(PartialEq, Clone, Trace, Finalize)]
 pub struct Function {
+    #[unsafe_ignore_trace]
     pub parameters: Vec<crate::ast::Identifier>,
+    #[unsafe_ignore_trace]
     pub body: crate::ast::BlockStatement,
-    pub env: Rc<RefCell<crate::environment::Environment>>,
+    pub env: Gc<GcCell<crate::environment::Environment>>,
 }
 
 impl std::fmt::Debug for Function {
@@ -21,7 +74,6 @@ impl std::fmt::Debug for Function {
         f.debug_struct("Function")
             .field("parameters", &self.parameters)
             .field("body", &self.body)
-            .field("env", &self.env.as_ptr())
             .finish()
     }
 }
@@ -36,11 +88,11 @@ pub enum EvaluationError {
     UnknownInfixOperator {
         left: Box<Object>,
         right: Box<Object>,
-        operation: crate::ast::InfixOperationKind
+        operation: crate::ast::InfixOperationKind,
     },
     UnknownPrefixOperator {
         right: Box<Object>,
-        operation: crate::ast::PrefixOperationKind
+        operation: crate::ast::PrefixOperationKind,
     },
     UnknownIdentifier(String),
     NonBooleanCondition(Object),
