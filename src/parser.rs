@@ -139,7 +139,7 @@ impl<'a> Parser<'a> {
         };
 
         Ok(crate::ast::LetStatement {
-            name: Identifier { name },
+            identifier: Identifier { name },
             value,
         })
     }

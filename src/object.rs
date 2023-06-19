@@ -1,5 +1,6 @@
-use gc::{Finalize, Trace, GcCell};
-use gc::Gc;
+use gc::{Finalize, Trace};
+
+use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
 pub enum ObjectCore {
@@ -45,7 +46,7 @@ impl Object {
     pub fn function(
         parameters: Vec<crate::ast::Identifier>,
         body: crate::ast::BlockStatement,
-        env: Gc<GcCell<crate::environment::Environment>>,
+        env: Environment,
     ) -> Object {
         Object {
             object: gc::Gc::new(ObjectCore::Function(Function {
@@ -66,7 +67,7 @@ pub struct Function {
     pub parameters: Vec<crate::ast::Identifier>,
     #[unsafe_ignore_trace]
     pub body: crate::ast::BlockStatement,
-    pub env: Gc<GcCell<crate::environment::Environment>>,
+    pub env: Environment,
 }
 
 impl std::fmt::Debug for Function {

@@ -6,9 +6,8 @@ use crate::environment;
 const PROMPT: &str = ">> ";
 
 pub fn start() -> Result<(), ReadlineError> {
-
     let mut environment = environment::Environment::new();
-    
+
     let mut rl = DefaultEditor::new()?;
     let mut content: String;
     loop {
@@ -17,20 +16,20 @@ pub fn start() -> Result<(), ReadlineError> {
         match readline {
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                continue // Clear line
-            },
+                continue; // Clear line
+            }
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
             Ok(line) => {
                 rl.add_history_entry(line.as_str())?;
                 content = line;
-            },
+            }
         }
 
         let tokenizer = crate::lexer::Tokenizer::new(&content);
@@ -43,8 +42,7 @@ pub fn start() -> Result<(), ReadlineError> {
                 let object = crate::evaluator::eval_program(&program, &mut environment);
 
                 println!("result: {:?}", object)
-            
-            },
+            }
             Err(errors) => {
                 println!("{:?}", errors);
             }

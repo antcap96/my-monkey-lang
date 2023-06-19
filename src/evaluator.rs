@@ -1,11 +1,10 @@
 use crate::ast::Expression;
 use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, ObjectCore, QuickReturn};
-use gc::{GcCell, Gc};
 
 pub fn eval_program(
     program: &crate::ast::Program,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, EvaluationError> {
     let mut output = Object::null();
     for statement in &program.statements {
@@ -22,7 +21,7 @@ pub fn eval_program(
 
 fn eval_statement(
     statement: &crate::ast::Statement,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
@@ -33,18 +32,16 @@ fn eval_statement(
 
 fn eval_let_statement(
     statement: &crate::ast::LetStatement,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
-    environment
-        .borrow_mut()
-        .set(&statement.name.name, value.clone());
+    environment.set(statement.identifier.name.clone(), value.clone());
     Ok(value)
 }
 
 fn eval_return_statement(
     statement: &crate::ast::ReturnStatement,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
     Err(QuickReturn::Return(value))
@@ -52,19 +49,14 @@ fn eval_return_statement(
 
 fn eval_expression(
     expression: &Expression,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, QuickReturn> {
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
-        Expression::Identifier(identifier) => {
-            environment
-                .borrow()
-                .get(&identifier.name)
-                .ok_or(QuickReturn::Error(EvaluationError::UnknownIdentifier(
-                    identifier.name.clone(),
-                )))
-        }
+        Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
+            QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name.clone())),
+        ),
         Expression::PrefixOperation(kind, expression) => {
             let right = eval_expression(expression, environment);
             eval_prefix_operation(kind, right)
@@ -95,9 +87,11 @@ fn eval_expression(
                 ))),
             }
         }
-        Expression::FunctionLiteral { parameters, body } => {
-            Ok(Object::function(parameters.clone(), body.clone(), Gc::clone(environment)))
-        }
+        Expression::FunctionLiteral { parameters, body } => Ok(Object::function(
+            parameters.clone(),
+            body.clone(),
+            environment.clone(),
+        )),
         Expression::CallExpression {
             function,
             arguments,
@@ -123,7 +117,7 @@ fn eval_expression(
 
 fn eval_expressions(
     arguments: &Vec<Expression>,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Vec<Object>, QuickReturn> {
     let mut result = Vec::new();
     for argument in arguments {
@@ -136,11 +130,9 @@ fn apply_function(
     function: &crate::object::Function,
     arguments: Vec<Object>,
 ) -> Result<Object, EvaluationError> {
-    let mut new_environment = Environment::new_enclosed(Gc::clone(&function.env));
+    let mut new_environment = Environment::new_enclosed(function.env.clone());
     for (parameter, argument) in function.parameters.iter().zip(arguments.iter()) {
-        new_environment
-            .borrow_mut()
-            .set(&parameter.name, argument.clone());
+        new_environment.set(parameter.name.clone(), argument.clone());
     }
     let result = eval_block_statement(&function.body, &mut new_environment);
     match result {
@@ -152,7 +144,7 @@ fn apply_function(
 
 fn eval_block_statement(
     block: &crate::ast::BlockStatement,
-    environment: &mut Gc<GcCell<Environment>>,
+    environment: &mut Environment,
 ) -> Result<Object, QuickReturn> {
     let mut result = Object::null();
     for statement in &block.statements {
