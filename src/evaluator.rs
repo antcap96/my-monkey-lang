@@ -1,18 +1,15 @@
 use crate::ast::Expression;
 use crate::environment::Environment;
-use crate::object::{EvaluationError, Object, QuickReturn};
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::object::{EvaluationError, Object, ObjectCore, QuickReturn};
+use gc::{GcCell, Gc};
 
-
-// TODO: should this be Rc<Object>?
 pub fn eval_program(
-    program: crate::ast::Program,
-    environment: &mut Rc<RefCell<Environment>>,
+    program: &crate::ast::Program,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, EvaluationError> {
-    let mut output = Object::Null;
-    for statement in program.statements {
-        let result = eval_statement(statement, environment);
+    let mut output = Object::null();
+    for statement in &program.statements {
+        let result = eval_statement(&statement, environment);
 
         match result {
             Err(QuickReturn::Return(value)) => return Ok(value),
@@ -24,8 +21,8 @@ pub fn eval_program(
 }
 
 fn eval_statement(
-    statement: crate::ast::Statement,
-    environment: &mut Rc<RefCell<Environment>>,
+    statement: &crate::ast::Statement,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
@@ -35,10 +32,10 @@ fn eval_statement(
 }
 
 fn eval_let_statement(
-    statement: crate::ast::LetStatement,
-    environment: &mut Rc<RefCell<Environment>>,
+    statement: &crate::ast::LetStatement,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
-    let value = eval_expression(statement.value, environment)?;
+    let value = eval_expression(&statement.value, environment)?;
     environment
         .borrow_mut()
         .set(&statement.name.name, value.clone());
@@ -46,35 +43,35 @@ fn eval_let_statement(
 }
 
 fn eval_return_statement(
-    statement: crate::ast::ReturnStatement,
-    environment: &mut Rc<RefCell<Environment>>,
+    statement: &crate::ast::ReturnStatement,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
-    let value = eval_expression(statement.value, environment)?;
+    let value = eval_expression(&statement.value, environment)?;
     Err(QuickReturn::Return(value))
 }
 
 fn eval_expression(
-    expression: Expression,
-    environment: &mut Rc<RefCell<Environment>>,
+    expression: &Expression,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
     match expression {
-        Expression::IntegerLiteral(value) => Ok(Object::Integer(value)),
-        Expression::BooleanLiteral(value) => Ok(Object::Boolean(value)),
+        Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
+        Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
         Expression::Identifier(identifier) => {
             environment
                 .borrow()
                 .get(&identifier.name)
                 .ok_or(QuickReturn::Error(EvaluationError::UnknownIdentifier(
-                    identifier.name,
+                    identifier.name.clone(),
                 )))
         }
         Expression::PrefixOperation(kind, expression) => {
-            let right = eval_expression(*expression, environment);
+            let right = eval_expression(expression, environment);
             eval_prefix_operation(kind, right)
         }
         Expression::InfixOperation(kind, left, right) => {
-            let left = eval_expression(*left, environment);
-            let right = eval_expression(*right, environment);
+            let left = eval_expression(left, environment);
+            let right = eval_expression(right, environment);
             eval_infix_operation(kind, left, right)
         }
         Expression::IfExpression {
@@ -82,15 +79,15 @@ fn eval_expression(
             consequence,
             alternative,
         } => {
-            let condition = eval_expression(*condition, environment)?;
-            match condition {
-                Object::Boolean(value) => {
-                    if value {
+            let condition = eval_expression(condition, environment)?;
+            match condition.core_ref() {
+                ObjectCore::Boolean(value) => {
+                    if *value {
                         eval_block_statement(consequence, environment)
                     } else if let Some(alternative) = alternative {
                         eval_block_statement(alternative, environment)
                     } else {
-                        Ok(Object::Null)
+                        Ok(Object::null())
                     }
                 }
                 _ => Err(QuickReturn::Error(EvaluationError::NonBooleanCondition(
@@ -99,25 +96,21 @@ fn eval_expression(
             }
         }
         Expression::FunctionLiteral { parameters, body } => {
-            Ok(Object::Function(crate::object::Function {
-                parameters,
-                body,
-                env: Rc::clone(environment),
-            }))
+            Ok(Object::function(parameters.clone(), body.clone(), Gc::clone(environment)))
         }
         Expression::CallExpression {
             function,
             arguments,
         } => {
-            let function = eval_expression(*function, environment)?;
-            let Object::Function(function) = function else {
+            let function = eval_expression(function, environment)?;
+            let ObjectCore::Function(function) = function.core_ref() else {
                 return Err(QuickReturn::Error(EvaluationError::CallNonFunction(
                     function,
                 )));};
             if function.parameters.len() != arguments.len() {
                 let expected = function.parameters.len();
                 return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
-                    function,
+                    function: function.clone(),
                     expected,
                     actual: arguments.len(),
                 }));
@@ -129,8 +122,8 @@ fn eval_expression(
 }
 
 fn eval_expressions(
-    arguments: Vec<Expression>,
-    environment: &mut Rc<RefCell<Environment>>,
+    arguments: &Vec<Expression>,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Vec<Object>, QuickReturn> {
     let mut result = Vec::new();
     for argument in arguments {
@@ -140,96 +133,98 @@ fn eval_expressions(
 }
 
 fn apply_function(
-    function: crate::object::Function,
+    function: &crate::object::Function,
     arguments: Vec<Object>,
 ) -> Result<Object, EvaluationError> {
-    let mut new_environment = Environment::new_enclosed(Rc::clone(&function.env));
+    let mut new_environment = Environment::new_enclosed(Gc::clone(&function.env));
     for (parameter, argument) in function.parameters.iter().zip(arguments.iter()) {
         new_environment
             .borrow_mut()
             .set(&parameter.name, argument.clone());
     }
-    let result = eval_block_statement(function.body, &mut new_environment);
+    let result = eval_block_statement(&function.body, &mut new_environment);
     match result {
-        Ok(ok @ _) => Ok(ok),
+        Ok(object) => Ok(object),
         Err(QuickReturn::Return(value)) => Ok(value),
         Err(QuickReturn::Error(err)) => Err(err),
     }
 }
 
 fn eval_block_statement(
-    block: crate::ast::BlockStatement,
-    environment: &mut Rc<RefCell<Environment>>,
+    block: &crate::ast::BlockStatement,
+    environment: &mut Gc<GcCell<Environment>>,
 ) -> Result<Object, QuickReturn> {
-    let mut result = Object::Null;
-    for statement in block.statements {
+    let mut result = Object::null();
+    for statement in &block.statements {
         result = eval_statement(statement, environment)?;
     }
     Ok(result)
 }
 
 fn eval_prefix_operation(
-    kind: crate::ast::PrefixOperationKind,
+    kind: &crate::ast::PrefixOperationKind,
     right: Result<Object, QuickReturn>,
 ) -> Result<Object, QuickReturn> {
     let right = right?;
-    match (&kind, &right) {
-        (crate::ast::PrefixOperationKind::Bang, Object::Boolean(value)) => {
-            Ok(Object::Boolean(!value))
+    match (&kind, right.core_ref()) {
+        (crate::ast::PrefixOperationKind::Bang, ObjectCore::Boolean(value)) => {
+            Ok(Object::boolean(!value))
         }
-        (crate::ast::PrefixOperationKind::Minus, Object::Integer(value)) => {
-            Ok(Object::Integer(-value))
+        (crate::ast::PrefixOperationKind::Minus, ObjectCore::Integer(value)) => {
+            Ok(Object::integer(-value))
         }
         _ => Err(QuickReturn::Error(EvaluationError::UnknownPrefixOperator {
             right: Box::new(right),
-            operation: kind,
+            operation: kind.clone(),
         })),
     }
 }
 
 fn eval_infix_operation(
-    kind: crate::ast::InfixOperationKind,
+    kind: &crate::ast::InfixOperationKind,
     left: Result<Object, QuickReturn>,
     right: Result<Object, QuickReturn>,
 ) -> Result<Object, QuickReturn> {
     use crate::ast::InfixOperationKind;
     let left = left?;
     let right = right?;
-    match (&kind, &left, &right) {
-        (InfixOperationKind::Plus, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Integer(left + right))
+    match (kind, left.core_ref(), right.core_ref()) {
+        (InfixOperationKind::Plus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::integer(left + right))
         }
-        (InfixOperationKind::Minus, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Integer(left - right))
+        (InfixOperationKind::Minus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::integer(left - right))
         }
-        (InfixOperationKind::Multiply, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Integer(left * right))
+        (InfixOperationKind::Multiply, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::integer(left * right))
         }
-        (InfixOperationKind::Divide, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Integer(left / right))
+        (InfixOperationKind::Divide, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::integer(left / right))
         }
-        (InfixOperationKind::LessThan, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Boolean(left < right))
+        (InfixOperationKind::LessThan, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::boolean(left < right))
         }
-        (InfixOperationKind::GreaterThan, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Boolean(left > right))
+        (
+            InfixOperationKind::GreaterThan,
+            ObjectCore::Integer(left),
+            ObjectCore::Integer(right),
+        ) => Ok(Object::boolean(left > right)),
+        (InfixOperationKind::Equal, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::boolean(left == right))
         }
-        (InfixOperationKind::Equal, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Boolean(left == right))
+        (InfixOperationKind::NotEqual, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::boolean(left != right))
         }
-        (InfixOperationKind::NotEqual, Object::Integer(left), Object::Integer(right)) => {
-            Ok(Object::Boolean(left != right))
+        (InfixOperationKind::Equal, ObjectCore::Boolean(left), ObjectCore::Boolean(right)) => {
+            Ok(Object::boolean(left == right))
         }
-        (InfixOperationKind::Equal, Object::Boolean(left), Object::Boolean(right)) => {
-            Ok(Object::Boolean(left == right))
-        }
-        (InfixOperationKind::NotEqual, Object::Boolean(left), Object::Boolean(right)) => {
-            Ok(Object::Boolean(left != right))
+        (InfixOperationKind::NotEqual, ObjectCore::Boolean(left), ObjectCore::Boolean(right)) => {
+            Ok(Object::boolean(left != right))
         }
         _ => Err(QuickReturn::Error(EvaluationError::UnknownInfixOperator {
             left: Box::new(left),
             right: Box::new(right),
-            operation: kind,
+            operation: kind.clone(),
         })),
     }
 }
@@ -241,20 +236,20 @@ mod tests {
     #[test]
     fn big_test() {
         let inputs = vec![
-            ("--5;", Ok(Object::Integer(5))),
-            ("56;", Ok(Object::Integer(56))),
-            ("-10;", Ok(Object::Integer(-10))),
-            ("true;", Ok(Object::Boolean(true))),
-            ("false;", Ok(Object::Boolean(false))),
-            ("!false;", Ok(Object::Boolean(true))),
-            ("!!true;", Ok(Object::Boolean(true))),
+            ("--5;", Ok(Object::integer(5))),
+            ("56;", Ok(Object::integer(56))),
+            ("-10;", Ok(Object::integer(-10))),
+            ("true;", Ok(Object::boolean(true))),
+            ("false;", Ok(Object::boolean(false))),
+            ("!false;", Ok(Object::boolean(true))),
+            ("!!true;", Ok(Object::boolean(true))),
         ];
 
         for (input, output) in inputs {
             let tokenizer = Tokenizer::new(input);
             let mut parser = Parser::new(tokenizer);
             let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(ast, &mut super::Environment::new());
+            let result = super::eval_program(&ast, &mut super::Environment::new());
 
             assert_eq!(result, output);
         }
@@ -263,12 +258,12 @@ mod tests {
     #[test]
     fn test_let_statements() {
         let inputs = vec![
-            ("let a = 5; a;", Ok(Object::Integer(5))),
-            ("let a = 5 * 5; a;", Ok(Object::Integer(25))),
-            ("let a = 5; let b = a; b;", Ok(Object::Integer(5))),
+            ("let a = 5; a;", Ok(Object::integer(5))),
+            ("let a = 5 * 5; a;", Ok(Object::integer(25))),
+            ("let a = 5; let b = a; b;", Ok(Object::integer(5))),
             (
                 "let a = 5; let b = a; let c = a + b + 5; c;",
-                Ok(Object::Integer(15)),
+                Ok(Object::integer(15)),
             ),
         ];
 
@@ -276,7 +271,7 @@ mod tests {
             let tokenizer = Tokenizer::new(input);
             let mut parser = Parser::new(tokenizer);
             let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(ast, &mut super::Environment::new());
+            let result = super::eval_program(&ast, &mut super::Environment::new());
 
             assert_eq!(result, output);
         }
@@ -287,25 +282,25 @@ mod tests {
         let inputs = vec![
             (
                 "let identity = fn(x) { x; }; identity(5);",
-                Ok(Object::Integer(5)),
+                Ok(Object::integer(5)),
             ),
             (
                 "let identity = fn(x) { return x; }; identity(5);",
-                Ok(Object::Integer(5)),
+                Ok(Object::integer(5)),
             ),
             (
                 "let double = fn(x) { x * 2; }; double(5);",
-                Ok(Object::Integer(10)),
+                Ok(Object::integer(10)),
             ),
             (
                 "let add = fn(x, y) { x + y; }; add(5, 5);",
-                Ok(Object::Integer(10)),
+                Ok(Object::integer(10)),
             ),
             (
                 "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));",
-                Ok(Object::Integer(20)),
+                Ok(Object::integer(20)),
             ),
-            ("fn(x) { x; }(5)", Ok(Object::Integer(5))),
+            ("fn(x) { x; }(5)", Ok(Object::integer(5))),
             (
                 "
                 let factorial = fn(n) {
@@ -313,7 +308,7 @@ mod tests {
                     else {factorial(n - 1) * n;};
                 };
                 factorial(3);",
-                Ok(Object::Integer(6)),
+                Ok(Object::integer(6)),
             ),
             (
                 "
@@ -323,7 +318,7 @@ mod tests {
                     };
                 };
                 func(5)(10);",
-                Ok(Object::Integer(15)),
+                Ok(Object::integer(15)),
             ),
         ];
 
@@ -331,7 +326,7 @@ mod tests {
             let tokenizer = Tokenizer::new(input);
             let mut parser = Parser::new(tokenizer);
             let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(ast, &mut super::Environment::new());
+            let result = super::eval_program(&ast, &mut super::Environment::new());
 
             assert_eq!(result, output);
         }
