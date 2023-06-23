@@ -54,7 +54,7 @@ fn eval_expression(
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
-        Expression::StringLiteral(value) => Ok(Object::string(value.trim_matches('\"').to_owned())),
+        Expression::StringLiteral(value) => Ok(Object::string(value.clone())),
         Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
             QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name.clone())),
         ),
