@@ -22,6 +22,7 @@ pub struct ReturnStatement {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(i64),
+    StringLiteral(String),
     BooleanLiteral(bool),
     PrefixOperation(PrefixOperationKind, Box<Expression>),
     InfixOperation(InfixOperationKind, Box<Expression>, Box<Expression>),
@@ -102,6 +103,7 @@ impl Display for Expression {
         match self {
             Identifier(ident) => write!(f, "{}", ident.name),
             IntegerLiteral(val) => write!(f, "{}", val),
+            StringLiteral(val) => write!(f, "\"{}\"", val),
             BooleanLiteral(val) => write!(f, "{}", val),
             PrefixOperation(kind, expr) => write!(f, "({}{})", kind.to_str(), expr),
             InfixOperation(kind, left, right) => {
