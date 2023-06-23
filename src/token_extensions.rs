@@ -33,7 +33,7 @@ fn prefix_operation(
         let next_token = parser
             .iter
             .next()
-            .ok_or(ParseError::expected_expression())?;
+            .ok_or(ParseError::premature_end_expected_expression())?;
         Ok(Expression::PrefixOperation(
             kind,
             Box::new(parser.parse_expression(Precedence::Prefix, next_token)?),
@@ -45,7 +45,7 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
     let next_token = parser
         .iter
         .next()
-        .ok_or(ParseError::expected_expression())?;
+        .ok_or(ParseError::premature_end_expected_expression())?;
 
     let expression = parser.parse_expression(Precedence::Lowest, next_token)?;
 
@@ -59,7 +59,7 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
     let token = parser
         .iter
         .next()
-        .ok_or(ParseError::expected_expression())?;
+        .ok_or(ParseError::premature_end_expected_expression())?;
     let condition = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
     let mut alternative = None;
 
@@ -84,19 +84,28 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
 fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseError> {
     let mut statements = Vec::new();
 
-    while let Some(token) = parser.iter.next() {
-        match token {
-            Token::RBrace => return Ok(BlockStatement { statements }),
-            _ => {
+    if let Some(Token::RBrace) = parser.iter.next_if(|token| token == &Token::RBrace) {
+        return Ok(BlockStatement { statements });
+    }
+
+    loop {
+        let next = parser.iter.next();
+        match next {
+            None => return Err(ParseError::PrematureEndOfInput {
+                expected: Expected::Token(Token::RBrace),
+            }),
+            Some(token) => {
                 let statement = parser.parse_statement(token)?;
                 statements.push(statement);
             }
         }
+        let next = parser.iter.next();
+        match next {
+            Some(Token::SemiColon) => continue,
+            Some(Token::RBrace) => return Ok(BlockStatement { statements }),
+            _ => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+        }
     }
-
-    Err(ParseError::PrematureEndOfInput {
-        expected: Expected::Token(Token::RBrace),
-    })
 }
 
 fn parse_function_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
@@ -165,7 +174,7 @@ fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixF
             let new_token = parser
                 .iter
                 .next()
-                .ok_or(ParseError::expected_expression())?;
+                .ok_or(ParseError::premature_end_expected_expression())?;
             Ok(Expression::InfixOperation(
                 kind,
                 Box::new(left),

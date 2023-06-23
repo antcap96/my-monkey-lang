@@ -283,43 +283,43 @@ mod tests {
     fn test_function_application() {
         let inputs = vec![
             (
-                "let identity = fn(x) { x; }; identity(5);",
+                "let identity = fn(x) { x }; identity(5)",
                 Ok(Object::integer(5)),
             ),
             (
-                "let identity = fn(x) { return x; }; identity(5);",
+                "let identity = fn(x) { return x }; identity(5)",
                 Ok(Object::integer(5)),
             ),
             (
-                "let double = fn(x) { x * 2; }; double(5);",
+                "let double = fn(x) { x * 2 }; double(5)",
                 Ok(Object::integer(10)),
             ),
             (
-                "let add = fn(x, y) { x + y; }; add(5, 5);",
+                "let add = fn(x, y) { x + y }; add(5, 5)",
                 Ok(Object::integer(10)),
             ),
             (
-                "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));",
+                "let add = fn(x, y) { x + y }; add(5 + 5, add(5, 5))",
                 Ok(Object::integer(20)),
             ),
-            ("fn(x) { x; }(5)", Ok(Object::integer(5))),
+            ("fn(x) { x }(5)", Ok(Object::integer(5))),
             (
                 "
                 let factorial = fn(n) {
-                    if n < 2 {1;}
-                    else {factorial(n - 1) * n;};
+                    if n < 2 {1}
+                    else {factorial(n - 1) * n}
                 };
-                factorial(3);",
+                factorial(3)",
                 Ok(Object::integer(6)),
             ),
             (
                 "
                 let func = fn(a) {
                     fn(b) {
-                        a + b;
-                    };
+                        a + b
+                    }
                 };
-                func(5)(10);",
+                func(5)(10)",
                 Ok(Object::integer(15)),
             ),
         ];
