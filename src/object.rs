@@ -6,6 +6,7 @@ use crate::environment::Environment;
 pub enum ObjectCore {
     Integer(i64),
     Boolean(bool),
+    String(String),
     Function(Function),
     Null,
 }
@@ -43,6 +44,11 @@ impl Object {
             object: gc::Gc::new(ObjectCore::Integer(value)),
         }
     }
+    pub fn string(value: String) -> Object {
+        Object {
+            object: gc::Gc::new(ObjectCore::String(value)),
+        }
+    }
     pub fn function(
         parameters: Vec<crate::ast::Identifier>,
         body: crate::ast::BlockStatement,
@@ -73,8 +79,7 @@ pub struct Function {
 impl std::fmt::Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Function")
-            .field("parameters", &self.parameters)
-            .field("body", &self.body)
+            .field("ptr", &(self as *const Function as usize))
             .finish()
     }
 }

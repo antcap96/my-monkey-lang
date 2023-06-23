@@ -138,6 +138,7 @@ impl HasPrefixOperation for Token {
         match self {
             Token::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
             Token::Int(val) => Ok(Expression::IntegerLiteral(val.parse()?)),
+            Token::String(val) => Ok(Expression::StringLiteral(val)),
             Token::True => Ok(Expression::BooleanLiteral(true)),
             Token::False => Ok(Expression::BooleanLiteral(false)),
             Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),

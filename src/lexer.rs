@@ -3,6 +3,7 @@ pub enum Token {
     Illegal(String),
     Ident(String),
     Int(String),
+    String(String),
 
     // Operators
     Assign,
@@ -76,6 +77,20 @@ impl<'a> Tokenizer<'a> {
         Token::Int(ident.to_owned())
     }
 
+    fn read_string(&mut self, start: usize) -> Token {
+        loop {
+            match self.iter.next() {
+                Some((_, '"')) => break,
+                None => return Token::Illegal("Unterminated string".to_owned()),
+                _ => {}
+            }
+        };
+
+        let end = self.next_idx();
+        let string = &self.input[start..end];
+        Token::String(string.to_owned())
+    }
+
     fn next_idx(&mut self) -> usize {
         self.iter
             .peek()
@@ -118,6 +133,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 '/' => Token::Slash,
                 '<' => Token::LessThan,
                 '>' => Token::GreaterThan,
+                '"' => self.read_string(idx),
                 c if Tokenizer::is_letter(c) => self.read_identifier(idx),
                 c if c.is_ascii_digit() => self.read_number(idx),
                 _c => Token::Illegal(ch.to_string()),

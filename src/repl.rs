@@ -33,12 +33,12 @@ pub fn start() -> Result<(), ReadlineError> {
         }
 
         let tokenizer = crate::lexer::Tokenizer::new(&content);
-        tokenizer.clone().for_each(|token| println!("{:?}", token));
+        // tokenizer.clone().for_each(|token| println!("{:?}", token));
         let program = crate::parser::Parser::new(tokenizer).parse_program();
 
         match program {
             Ok(program) => {
-                println!("{}", program);
+                // println!("{}", program);
                 let object = crate::evaluator::eval_program(&program, &mut environment);
 
                 println!("result: {:?}", object)

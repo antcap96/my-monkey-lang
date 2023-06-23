@@ -54,6 +54,7 @@ fn eval_expression(
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
+        Expression::StringLiteral(value) => Ok(Object::string(value.trim_matches('\"').to_owned())),
         Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
             QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name.clone())),
         ),
@@ -184,6 +185,9 @@ fn eval_infix_operation(
         (InfixOperationKind::Plus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
             Ok(Object::integer(left + right))
         }
+        (InfixOperationKind::Plus, ObjectCore::String(left), ObjectCore::String(right)) => {
+            Ok(Object::string(format!("{}{}", left, right)))
+        }
         (InfixOperationKind::Minus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
             Ok(Object::integer(left - right))
         }
@@ -204,7 +208,13 @@ fn eval_infix_operation(
         (InfixOperationKind::Equal, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
             Ok(Object::boolean(left == right))
         }
+        (InfixOperationKind::Equal, ObjectCore::String(left), ObjectCore::String(right)) => {
+            Ok(Object::boolean(left == right))
+        }
         (InfixOperationKind::NotEqual, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+            Ok(Object::boolean(left != right))
+        }
+        (InfixOperationKind::NotEqual, ObjectCore::String(left), ObjectCore::String(right)) => {
             Ok(Object::boolean(left != right))
         }
         (InfixOperationKind::Equal, ObjectCore::Boolean(left), ObjectCore::Boolean(right)) => {
