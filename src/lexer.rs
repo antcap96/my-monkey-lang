@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
     Illegal(String),
     Ident(String),
@@ -36,6 +36,16 @@ pub enum Token {
     Return,
 }
 
+static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
+    "fn" => Token::Function,
+    "let" => Token::Let,
+    "true" => Token::True,
+    "false" => Token::False,
+    "if" => Token::If,
+    "else" => Token::Else,
+    "return" => Token::Return,
+};
+
 #[derive(Clone)]
 pub struct Tokenizer<'a> {
     input: &'a str,
@@ -57,17 +67,12 @@ impl<'a> Tokenizer<'a> {
 
         let end = self.next_idx();
         let ident = &self.input[start..end];
-        match ident {
-            "fn" => Token::Function,
-            "let" => Token::Let,
-            "return" => Token::Return,
-            "true" => Token::True,
-            "false" => Token::False,
-            "if" => Token::If,
-            "else" => Token::Else,
-            _ => Token::Ident(ident.to_owned()),
-        }
+        KEYWORDS
+            .get(ident)
+            .cloned()
+            .unwrap_or_else(|| Token::Ident(ident.to_owned()))
     }
+    
     fn read_number(&mut self, start: usize) -> Token {
         while self.iter.next_if(|(_, ch)| ch.is_ascii_digit()).is_some() {}
 
@@ -84,7 +89,7 @@ impl<'a> Tokenizer<'a> {
                 None => return Token::Illegal("Unterminated string".to_owned()),
                 _ => {}
             }
-        };
+        }
 
         let end = self.next_idx();
         let string = &self.input[start..end];
