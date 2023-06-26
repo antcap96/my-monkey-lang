@@ -1,5 +1,5 @@
 use gc::{Finalize, Gc, GcCell, Trace};
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
 pub struct EnvironmentCore {
@@ -37,12 +37,11 @@ impl Environment {
             .get(key)
             .cloned()
             .or(env.outer.as_ref().and_then(|outer| outer.get(key)))
+            .or(crate::builtins::map_builtins(key)
+                .map(crate::object::Object::builtin_function))
     }
 
     pub fn set(&mut self, key: String, value: crate::object::Object) {
-        self.environment
-            .borrow_mut()
-            .store
-            .insert(key, value);
+        self.environment.borrow_mut().store.insert(key, value);
     }
 }

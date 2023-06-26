@@ -98,22 +98,45 @@ fn eval_expression(
             arguments,
         } => {
             let function = eval_expression(function, environment)?;
-            let ObjectCore::Function(function) = function.core_ref() else {
-                return Err(QuickReturn::Error(EvaluationError::CallNonFunction(
+            match function.core_ref() {
+                ObjectCore::Function(function) => {
+                    eval_call_function(function, arguments, environment)
+                }
+                ObjectCore::BuiltinFunction(function) => {
+                    eval_call_builtin_function(function, arguments, environment)
+                }
+                _ => Err(QuickReturn::Error(EvaluationError::CallNonFunction(
                     function,
-                )));};
-            if function.parameters.len() != arguments.len() {
-                let expected = function.parameters.len();
-                return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
-                    function: function.clone(),
-                    expected,
-                    actual: arguments.len(),
-                }));
+                ))),
             }
-            let arguments = eval_expressions(arguments, environment)?;
-            apply_function(function, arguments).map_err(|err| QuickReturn::Error(err))
         }
     }
+}
+
+fn eval_call_function(
+    function: &crate::object::Function,
+    arguments: &Vec<Expression>,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
+    if function.parameters.len() != arguments.len() {
+        let expected = function.parameters.len();
+        return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
+            function: function.clone(),
+            expected,
+            actual: arguments.len(),
+        }));
+    }
+    let arguments = eval_expressions(arguments, environment)?;
+    apply_function(function, arguments).map_err(|err| QuickReturn::Error(err))
+}
+
+fn eval_call_builtin_function(
+    function: &crate::object::BuiltinFunction,
+    arguments: &Vec<Expression>,
+    environment: &mut Environment,
+) -> Result<Object, QuickReturn> {
+    let arguments = eval_expressions(arguments, environment)?;
+    (function.func)(arguments)
 }
 
 fn eval_expressions(
