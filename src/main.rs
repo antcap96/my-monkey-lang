@@ -6,6 +6,7 @@ mod token_extensions;
 mod object;
 mod evaluator;
 mod environment;
+mod builtins;
 
 fn main() {
     repl::start().unwrap();

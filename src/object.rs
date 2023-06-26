@@ -8,6 +8,7 @@ pub enum ObjectCore {
     Boolean(bool),
     String(String),
     Function(Function),
+    BuiltinFunction(BuiltinFunction),
     Null,
 }
 
@@ -62,6 +63,11 @@ impl Object {
             })),
         }
     }
+    pub fn builtin_function(func: BuiltinFunction) -> Object {
+        Object {
+            object: gc::Gc::new(ObjectCore::BuiltinFunction(func)),
+        }
+    }
     pub fn core_ref(&self) -> &ObjectCore {
         &self.object
     }
@@ -80,6 +86,25 @@ impl std::fmt::Debug for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Function")
             .field("ptr", &(self as *const Function as usize))
+            .finish()
+    }
+}
+
+#[derive(Clone, Trace, Finalize)]
+pub struct BuiltinFunction {
+    pub func: fn(Vec<Object>) -> Result<Object, QuickReturn>,
+}
+
+impl PartialEq for BuiltinFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.func as usize == other.func as usize
+    }
+}
+
+impl std::fmt::Debug for BuiltinFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BuiltinFunction")
+            .field("ptr", &(self as *const BuiltinFunction as usize))
             .finish()
     }
 }
@@ -108,4 +133,5 @@ pub enum EvaluationError {
         expected: usize,
         actual: usize,
     },
+    BuiltinFunctionError(String),
 }
