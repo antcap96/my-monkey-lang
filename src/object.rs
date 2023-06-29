@@ -7,6 +7,7 @@ pub enum ObjectCore {
     Integer(i64),
     Boolean(bool),
     String(String),
+    Array(Vec<Object>),
     Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
@@ -48,6 +49,11 @@ impl Object {
     pub fn string(value: String) -> Object {
         Object {
             object: gc::Gc::new(ObjectCore::String(value)),
+        }
+    }
+    pub fn array(array: Vec<Object>) -> Object {
+        Object {
+            object: gc::Gc::new(ObjectCore::Array(array)),
         }
     }
     pub fn function(
@@ -134,4 +140,6 @@ pub enum EvaluationError {
         actual: usize,
     },
     BuiltinFunctionError(String),
+    IndexNotSupported(Object),
+    IndexingWithNonInteger(Object),
 }

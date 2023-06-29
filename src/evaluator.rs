@@ -55,6 +55,12 @@ fn eval_expression(
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
         Expression::StringLiteral(value) => Ok(Object::string(value.clone())),
+        Expression::ArrayLiteral(array) => Ok(Object::array(
+            array
+                .iter()
+                .map(|expression| eval_expression(expression, environment))
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
         Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
             QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name.clone())),
         ),
@@ -108,6 +114,17 @@ fn eval_expression(
                 _ => Err(QuickReturn::Error(EvaluationError::CallNonFunction(
                     function,
                 ))),
+            }
+        }
+        Expression::IndexExpression { left, index } => {
+            let left = eval_expression(left, environment)?;
+            let index = eval_expression(index, environment)?;
+            match (left.core_ref(), index.core_ref()) {
+                (ObjectCore::Array(array), ObjectCore::Integer(index)) => {
+                    Ok(array.get(*index as usize).cloned().unwrap_or(Object::null()))
+                },
+                (ObjectCore::Array(_), _) => Err(QuickReturn::Error(EvaluationError::IndexingWithNonInteger(index))),
+                _ => Err(QuickReturn::Error(EvaluationError::IndexNotSupported(left))),
             }
         }
     }

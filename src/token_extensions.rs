@@ -17,6 +17,7 @@ impl HasPrecedence for crate::lexer::Token {
             Token::Asterisk => Precedence::Product,
             Token::Slash => Precedence::Product,
             Token::LParen => Precedence::Call,
+            Token::LBracket => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -55,6 +56,34 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
     }
 }
 
+fn parse_expression_list(
+    parser: &mut Parser,
+    terminator: Token,
+) -> Result<Vec<Expression>, ParseError> {
+    let mut elements = Vec::new();
+
+    loop {
+        match parser.iter.next() {
+            Some(next) if next == terminator => return Ok(elements),
+            Some(next) => {
+                elements.push(parser.parse_expression(Precedence::Lowest, next)?);
+            }
+            None => return Err(ParseError::premature_end_expected_expression()),
+        }
+
+        match parser.iter.next() {
+            Some(Token::Comma) => {}
+            Some(next) if next == terminator => return Ok(elements),
+            next => return Err(ParseError::unexpected_token(terminator, next)),
+        }
+    }
+}
+
+fn parse_array_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
+    let expressions = parse_expression_list(parser, Token::RBracket)?;
+    Ok(Expression::ArrayLiteral(expressions))
+}
+
 fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
     let token = parser
         .iter
@@ -91,9 +120,11 @@ fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseErr
     loop {
         let next = parser.iter.next();
         match next {
-            None => return Err(ParseError::PrematureEndOfInput {
-                expected: Expected::Token(Token::RBrace),
-            }),
+            None => {
+                return Err(ParseError::PrematureEndOfInput {
+                    expected: Expected::Token(Token::RBrace),
+                })
+            }
             Some(token) => {
                 let statement = parser.parse_statement(token)?;
                 statements.push(statement);
@@ -153,6 +184,7 @@ impl HasPrefixOperation for Token {
             Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
             Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
             Token::LParen => parse_grouped_expression(parser),
+            Token::LBracket => parse_array_literal(parser),
             Token::If => parse_if_expression(parser),
             Token::Function => parse_function_literal(parser),
             _ => Err(ParseError::NoPrefixFunction(self)),
@@ -185,7 +217,7 @@ fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixF
 }
 
 fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
-    let arguments = parse_call_arguments(parser)?;
+    let arguments = parse_expression_list(parser, Token::RParen)?;
 
     Ok(Expression::CallExpression {
         function: Box::new(left),
@@ -193,24 +225,22 @@ fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expressi
     })
 }
 
-fn parse_call_arguments(parser: &mut Parser) -> Result<Vec<Expression>, ParseError> {
-    let mut arguments = Vec::new();
+fn parse_index_expression(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
+    let next = parser
+        .iter
+        .next()
+        .ok_or(ParseError::premature_end_expected_expression())?;
+    let index = parser.parse_expression(Precedence::Lowest, next)?;
 
-    loop {
-        let next = parser.iter.next();
-        match next {
-            Some(Token::RParen) => return Ok(arguments), // empty argument list or tailing comma
-            Some(token) => arguments.push(parser.parse_expression(Precedence::Lowest, token)?),
-            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
-        }
+    let next = parser.iter.next();
+    let Some(Token::RBracket) = next else {
+        return Err(ParseError::unexpected_token(Token::RBracket, next));
+    };
 
-        let next = parser.iter.next();
-        match next {
-            Some(Token::Comma) => continue,
-            Some(Token::RParen) => return Ok(arguments),
-            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
-        }
-    }
+    Ok(Expression::IndexExpression {
+        left: Box::new(left),
+        index: Box::new(index),
+    })
 }
 
 impl HasInfixOperation for Token {
@@ -227,6 +257,7 @@ impl HasInfixOperation for Token {
             Token::Asterisk => Some(infix_operation(Token::Asterisk, InfixKind::Multiply)),
             Token::Slash => Some(infix_operation(Token::Slash, InfixKind::Divide)),
             Token::LParen => Some(Box::new(parse_call_function)),
+            Token::LBracket => Some(Box::new(parse_index_expression)),
             _ => None,
         }
     }

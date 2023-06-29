@@ -24,6 +24,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     StringLiteral(String),
     BooleanLiteral(bool),
+    ArrayLiteral(Vec<Expression>),
     PrefixOperation(PrefixOperationKind, Box<Expression>),
     InfixOperation(InfixOperationKind, Box<Expression>, Box<Expression>),
     IfExpression {
@@ -38,6 +39,10 @@ pub enum Expression {
     CallExpression {
         function: Box<Expression>,
         arguments: Vec<Expression>,
+    },
+    IndexExpression {
+        left: Box<Expression>,
+        index: Box<Expression>,
     },
 }
 
@@ -105,6 +110,16 @@ impl Display for Expression {
             IntegerLiteral(val) => write!(f, "{}", val),
             StringLiteral(val) => write!(f, "\"{}\"", val),
             BooleanLiteral(val) => write!(f, "{}", val),
+            ArrayLiteral(arr) => {
+                write!(f, "[")?;
+                for (i, expr) in arr.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", expr)?;
+                }
+                write!(f, "]")
+            }
             PrefixOperation(kind, expr) => write!(f, "({}{})", kind.to_str(), expr),
             InfixOperation(kind, left, right) => {
                 write!(f, "({} {} {})", left, kind.to_str(), right)
@@ -147,6 +162,7 @@ impl Display for Expression {
                         .join(", ")
                 )
             }
+            IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
         }
     }
 }

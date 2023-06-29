@@ -25,6 +25,8 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
 
     // Keywords
     Function,
@@ -126,6 +128,8 @@ impl<'a> Iterator for Tokenizer<'a> {
                 ')' => Token::RParen,
                 '{' => Token::LBrace,
                 '}' => Token::RBrace,
+                '[' => Token::LBracket,
+                ']' => Token::RBracket,
                 '-' => Token::Minus,
                 '!' => {
                     if self.iter.next_if(|(_, ch)| *ch == '=').is_some() {
