@@ -1,22 +1,8 @@
 use crate::{
     ast::{Identifier, Statement},
+    expression_parsing::Precedence,
     lexer::Token,
-    token_extensions::HasInfixOperation,
-    token_extensions::HasPrecedence,
-    token_extensions::HasPrefixOperation,
 };
-
-#[derive(PartialOrd, PartialEq, Debug)]
-pub enum Precedence {
-    Lowest = 0,
-    Equals,
-    LessGreater,
-    Sum,
-    Product,
-    Prefix,
-    Call,
-    Index,
-}
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -176,34 +162,21 @@ impl<'a> Parser<'a> {
         precedence: Precedence,
         token: Token,
     ) -> Result<crate::ast::Expression, ParseError> {
-        let mut left_expression = token.prefix_parsing(self)?;
+        let mut left_expression = crate::expression_parsing::prefix_parsing(token, self)?;
 
         loop {
-            //TODO: do i need statement_continues? SemiColon would have Precedence::Lowest
-            let statement_ended = self
-                .iter
-                .peek()
-                .map(|token| *token == Token::SemiColon)
-                .unwrap_or(true);
-            let next_precedence = self
-                .iter
-                .peek()
-                .map(|token| token.precedence())
-                .unwrap_or(Precedence::Lowest);
+            let Some(next_token) = self.iter.peek() else {break};
+
+            //TODO: do i need statement_ended? SemiColon would have Precedence::Lowest
+            let statement_ended = next_token == &Token::SemiColon;
+            let next_precedence = crate::expression_parsing::precedence(next_token);
             if statement_ended || precedence >= next_precedence {
                 break;
             }
 
-            let next_token = self.iter.peek();
-            let infix_parse_function = next_token.and_then(|token| token.infix_parsing_function());
-
-            left_expression = match infix_parse_function {
-                None => break,
-                Some(parse_function) => {
-                    self.iter.next();
-                    parse_function(left_expression, self)?
-                }
-            };
+            let Some(next_token) = self.iter.next() else {break};
+            let Some(infix_parse_function) = crate::expression_parsing::infix_parsing_function(next_token) else {break};
+            left_expression = infix_parse_function(left_expression, self)?;
         }
 
         Ok(left_expression)

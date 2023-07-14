@@ -86,7 +86,7 @@ impl PartialEq for BuiltinFunction {
 impl std::fmt::Debug for BuiltinFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BuiltinFunction")
-            .field("ptr", &(self as *const BuiltinFunction as usize))
+            .field("ptr", &(self as *const BuiltinFunction))
             .finish()
     }
 }
