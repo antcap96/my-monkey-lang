@@ -2,11 +2,11 @@ mod ast;
 mod builtins;
 mod environment;
 mod evaluator;
+mod expression_parsing;
 mod lexer;
 mod object;
 mod parser;
 mod repl;
-mod token_extensions;
 
 fn main() {
     repl::start().unwrap();
