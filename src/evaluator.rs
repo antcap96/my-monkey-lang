@@ -1,11 +1,12 @@
 use crate::ast::Expression;
 use crate::environment::Environment;
-use crate::object::{EvaluationError, Object, ObjectCore, QuickReturn};
+use crate::object::{EvaluationError, Object, QuickReturn};
+use gc::Gc;
 
 pub fn eval_program(
     program: &crate::ast::Program,
     environment: &mut Environment,
-) -> Result<Object, EvaluationError> {
+) -> Result<Gc<Object>, EvaluationError> {
     let mut output = Object::null();
     for statement in &program.statements {
         let result = eval_statement(&statement, environment);
@@ -22,7 +23,7 @@ pub fn eval_program(
 fn eval_statement(
     statement: &crate::ast::Statement,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     match statement {
         crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
         crate::ast::Statement::Return(statement) => eval_return_statement(statement, environment),
@@ -33,7 +34,7 @@ fn eval_statement(
 fn eval_let_statement(
     statement: &crate::ast::LetStatement,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
     environment.set(statement.identifier.name.clone(), value.clone());
     Ok(value)
@@ -42,7 +43,7 @@ fn eval_let_statement(
 fn eval_return_statement(
     statement: &crate::ast::ReturnStatement,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
     Err(QuickReturn::Return(value))
 }
@@ -50,7 +51,7 @@ fn eval_return_statement(
 fn eval_expression(
     expression: &Expression,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
@@ -79,8 +80,8 @@ fn eval_expression(
             alternative,
         } => {
             let condition = eval_expression(condition, environment)?;
-            match condition.core_ref() {
-                ObjectCore::Boolean(value) => {
+            match condition.as_ref() {
+                Object::Boolean(value) => {
                     if *value {
                         eval_block_statement(consequence, environment)
                     } else if let Some(alternative) = alternative {
@@ -104,11 +105,9 @@ fn eval_expression(
             arguments,
         } => {
             let function = eval_expression(function, environment)?;
-            match function.core_ref() {
-                ObjectCore::Function(function) => {
-                    eval_call_function(function, arguments, environment)
-                }
-                ObjectCore::BuiltinFunction(function) => {
+            match function.as_ref() {
+                Object::Function(function) => eval_call_function(function, arguments, environment),
+                Object::BuiltinFunction(function) => {
                     eval_call_builtin_function(function, arguments, environment)
                 }
                 _ => Err(QuickReturn::Error(EvaluationError::CallNonFunction(
@@ -119,11 +118,14 @@ fn eval_expression(
         Expression::IndexExpression { left, index } => {
             let left = eval_expression(left, environment)?;
             let index = eval_expression(index, environment)?;
-            match (left.core_ref(), index.core_ref()) {
-                (ObjectCore::Array(array), ObjectCore::Integer(index)) => {
-                    Ok(array.get(*index as usize).cloned().unwrap_or(Object::null()))
-                },
-                (ObjectCore::Array(_), _) => Err(QuickReturn::Error(EvaluationError::IndexingWithNonInteger(index))),
+            match (left.as_ref(), index.as_ref()) {
+                (Object::Array(array), Object::Integer(index)) => Ok(array
+                    .get(*index as usize)
+                    .cloned()
+                    .unwrap_or(Object::null())),
+                (Object::Array(_), _) => Err(QuickReturn::Error(
+                    EvaluationError::IndexingWithNonInteger(index),
+                )),
                 _ => Err(QuickReturn::Error(EvaluationError::IndexNotSupported(left))),
             }
         }
@@ -134,7 +136,7 @@ fn eval_call_function(
     function: &crate::object::Function,
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     if function.parameters.len() != arguments.len() {
         let expected = function.parameters.len();
         return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
@@ -151,7 +153,7 @@ fn eval_call_builtin_function(
     function: &crate::object::BuiltinFunction,
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     let arguments = eval_expressions(arguments, environment)?;
     (function.func)(arguments)
 }
@@ -159,7 +161,7 @@ fn eval_call_builtin_function(
 fn eval_expressions(
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Vec<Object>, QuickReturn> {
+) -> Result<Vec<Gc<Object>>, QuickReturn> {
     let mut result = Vec::new();
     for argument in arguments {
         result.push(eval_expression(argument, environment)?);
@@ -169,8 +171,8 @@ fn eval_expressions(
 
 fn apply_function(
     function: &crate::object::Function,
-    arguments: Vec<Object>,
-) -> Result<Object, EvaluationError> {
+    arguments: Vec<Gc<Object>>,
+) -> Result<Gc<Object>, EvaluationError> {
     let mut new_environment = Environment::new_enclosed(function.env.clone());
     for (parameter, argument) in function.parameters.iter().zip(arguments.iter()) {
         new_environment.set(parameter.name.clone(), argument.clone());
@@ -186,7 +188,7 @@ fn apply_function(
 fn eval_block_statement(
     block: &crate::ast::BlockStatement,
     environment: &mut Environment,
-) -> Result<Object, QuickReturn> {
+) -> Result<Gc<Object>, QuickReturn> {
     let mut result = Object::null();
     for statement in &block.statements {
         result = eval_statement(statement, environment)?;
@@ -196,14 +198,14 @@ fn eval_block_statement(
 
 fn eval_prefix_operation(
     kind: &crate::ast::PrefixOperationKind,
-    right: Result<Object, QuickReturn>,
-) -> Result<Object, QuickReturn> {
+    right: Result<Gc<Object>, QuickReturn>,
+) -> Result<Gc<Object>, QuickReturn> {
     let right = right?;
-    match (&kind, right.core_ref()) {
-        (crate::ast::PrefixOperationKind::Bang, ObjectCore::Boolean(value)) => {
+    match (&kind, right.as_ref()) {
+        (crate::ast::PrefixOperationKind::Bang, Object::Boolean(value)) => {
             Ok(Object::boolean(!value))
         }
-        (crate::ast::PrefixOperationKind::Minus, ObjectCore::Integer(value)) => {
+        (crate::ast::PrefixOperationKind::Minus, Object::Integer(value)) => {
             Ok(Object::integer(-value))
         }
         _ => Err(QuickReturn::Error(EvaluationError::UnknownPrefixOperator {
@@ -215,52 +217,50 @@ fn eval_prefix_operation(
 
 fn eval_infix_operation(
     kind: &crate::ast::InfixOperationKind,
-    left: Result<Object, QuickReturn>,
-    right: Result<Object, QuickReturn>,
-) -> Result<Object, QuickReturn> {
+    left: Result<Gc<Object>, QuickReturn>,
+    right: Result<Gc<Object>, QuickReturn>,
+) -> Result<Gc<Object>, QuickReturn> {
     use crate::ast::InfixOperationKind;
     let left = left?;
     let right = right?;
-    match (kind, left.core_ref(), right.core_ref()) {
-        (InfixOperationKind::Plus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+    match (kind, left.as_ref(), right.as_ref()) {
+        (InfixOperationKind::Plus, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::integer(left + right))
         }
-        (InfixOperationKind::Plus, ObjectCore::String(left), ObjectCore::String(right)) => {
+        (InfixOperationKind::Plus, Object::String(left), Object::String(right)) => {
             Ok(Object::string(format!("{}{}", left, right)))
         }
-        (InfixOperationKind::Minus, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::Minus, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::integer(left - right))
         }
-        (InfixOperationKind::Multiply, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::Multiply, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::integer(left * right))
         }
-        (InfixOperationKind::Divide, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::Divide, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::integer(left / right))
         }
-        (InfixOperationKind::LessThan, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::LessThan, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::boolean(left < right))
         }
-        (
-            InfixOperationKind::GreaterThan,
-            ObjectCore::Integer(left),
-            ObjectCore::Integer(right),
-        ) => Ok(Object::boolean(left > right)),
-        (InfixOperationKind::Equal, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::GreaterThan, Object::Integer(left), Object::Integer(right)) => {
+            Ok(Object::boolean(left > right))
+        }
+        (InfixOperationKind::Equal, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::boolean(left == right))
         }
-        (InfixOperationKind::Equal, ObjectCore::String(left), ObjectCore::String(right)) => {
+        (InfixOperationKind::Equal, Object::String(left), Object::String(right)) => {
             Ok(Object::boolean(left == right))
         }
-        (InfixOperationKind::NotEqual, ObjectCore::Integer(left), ObjectCore::Integer(right)) => {
+        (InfixOperationKind::NotEqual, Object::Integer(left), Object::Integer(right)) => {
             Ok(Object::boolean(left != right))
         }
-        (InfixOperationKind::NotEqual, ObjectCore::String(left), ObjectCore::String(right)) => {
+        (InfixOperationKind::NotEqual, Object::String(left), Object::String(right)) => {
             Ok(Object::boolean(left != right))
         }
-        (InfixOperationKind::Equal, ObjectCore::Boolean(left), ObjectCore::Boolean(right)) => {
+        (InfixOperationKind::Equal, Object::Boolean(left), Object::Boolean(right)) => {
             Ok(Object::boolean(left == right))
         }
-        (InfixOperationKind::NotEqual, ObjectCore::Boolean(left), ObjectCore::Boolean(right)) => {
+        (InfixOperationKind::NotEqual, Object::Boolean(left), Object::Boolean(right)) => {
             Ok(Object::boolean(left != right))
         }
         _ => Err(QuickReturn::Error(EvaluationError::UnknownInfixOperator {

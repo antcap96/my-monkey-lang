@@ -74,7 +74,7 @@ impl<'a> Tokenizer<'a> {
             .cloned()
             .unwrap_or_else(|| Token::Ident(ident.to_owned()))
     }
-    
+
     fn read_number(&mut self, start: usize) -> Token {
         while self.iter.next_if(|(_, ch)| ch.is_ascii_digit()).is_some() {}
 
