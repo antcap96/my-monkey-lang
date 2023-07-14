@@ -1,9 +1,10 @@
+use crate::object::Object;
 use gc::{Finalize, Gc, GcCell, Trace};
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
 pub struct EnvironmentCore {
-    store: HashMap<String, crate::object::Object>,
+    store: HashMap<String, Gc<Object>>,
     outer: Option<Environment>,
 }
 
@@ -30,18 +31,17 @@ impl Environment {
             })),
         }
     }
-    //                                     Result<crate::object::Object, crate::object::QuickReturn>
-    pub fn get(&self, key: &str) -> Option<crate::object::Object> {
+    //                              Result<crate::object::Object, crate::object::QuickReturn>
+    pub fn get(&self, key: &str) -> Option<Gc<Object>> {
         let env = self.environment.borrow();
         env.store
             .get(key)
             .cloned()
             .or(env.outer.as_ref().and_then(|outer| outer.get(key)))
-            .or(crate::builtins::map_builtins(key)
-                .map(crate::object::Object::builtin_function))
+            .or(crate::builtins::map_builtins(key).map(crate::object::Object::builtin_function))
     }
 
-    pub fn set(&mut self, key: String, value: crate::object::Object) {
+    pub fn set(&mut self, key: String, value: Gc<Object>) {
         self.environment.borrow_mut().store.insert(key, value);
     }
 }

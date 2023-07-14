@@ -1,4 +1,5 @@
-use crate::object::{BuiltinFunction, EvaluationError, Object, ObjectCore, QuickReturn};
+use crate::object::{BuiltinFunction, EvaluationError, Object, QuickReturn};
+use gc::Gc;
 
 fn unexpected_number_of_arguments_error(expected: usize, got: usize) -> QuickReturn {
     QuickReturn::Error(EvaluationError::BuiltinFunctionError(format!(
@@ -7,12 +8,12 @@ fn unexpected_number_of_arguments_error(expected: usize, got: usize) -> QuickRet
     )))
 }
 
-fn builtin_first(args: Vec<Object>) -> Result<Object, QuickReturn> {
+fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
-    match args[0].core_ref() {
-        ObjectCore::Array(arr) => {
+    match args[0].as_ref() {
+        Object::Array(arr) => {
             if arr.len() == 0 {
                 return Ok(Object::null());
             }
@@ -24,12 +25,12 @@ fn builtin_first(args: Vec<Object>) -> Result<Object, QuickReturn> {
     }
 }
 
-fn builtin_last(args: Vec<Object>) -> Result<Object, QuickReturn> {
+fn builtin_last(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
-    match args[0].core_ref() {
-        ObjectCore::Array(arr) => {
+    match args[0].as_ref() {
+        Object::Array(arr) => {
             if arr.len() == 0 {
                 return Ok(Object::null());
             }
@@ -41,13 +42,13 @@ fn builtin_last(args: Vec<Object>) -> Result<Object, QuickReturn> {
     }
 }
 
-fn builtin_len(args: Vec<Object>) -> Result<Object, QuickReturn> {
+fn builtin_len(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
-    match args[0].core_ref() {
-        ObjectCore::String(s) => Ok(Object::integer(s.len() as i64)),
-        ObjectCore::Array(arr) => Ok(Object::integer(arr.len() as i64)),
+    match args[0].as_ref() {
+        Object::String(s) => Ok(Object::integer(s.len() as i64)),
+        Object::Array(arr) => Ok(Object::integer(arr.len() as i64)),
         _ => Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
             format!(
                 "unexpected argument type. Expected String got {:?}",
@@ -57,12 +58,12 @@ fn builtin_len(args: Vec<Object>) -> Result<Object, QuickReturn> {
     }
 }
 
-fn builtin_push(args: Vec<Object>) -> Result<Object, QuickReturn> {
+fn builtin_push(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     if args.len() != 2 {
         return Err(unexpected_number_of_arguments_error(2, args.len()));
     }
-    match args[0].core_ref() {
-        ObjectCore::Array(arr) => {
+    match args[0].as_ref() {
+        Object::Array(arr) => {
             let mut new_arr = arr.clone();
             new_arr.push(args[1].clone());
             Ok(Object::array(new_arr))
@@ -73,12 +74,12 @@ fn builtin_push(args: Vec<Object>) -> Result<Object, QuickReturn> {
     }
 }
 
-fn builtin_tail(args: Vec<Object>) -> Result<Object, QuickReturn> {
+fn builtin_tail(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
-    match args[0].core_ref() {
-        ObjectCore::Array(arr) => {
+    match args[0].as_ref() {
+        Object::Array(arr) => {
             if arr.len() == 0 {
                 return Ok(Object::null());
             }

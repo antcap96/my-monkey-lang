@@ -1,81 +1,57 @@
-use gc::{Finalize, Trace};
+use gc::{Finalize, Gc, Trace};
 
 use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
-pub enum ObjectCore {
+pub enum Object {
     Integer(i64),
     Boolean(bool),
     String(String),
-    Array(Vec<Object>),
+    Array(Vec<Gc<Object>>),
     Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
 }
 
-#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
-pub struct Object {
-    object: gc::Gc<ObjectCore>,
-}
-
 thread_local! {
-    static NULL: Object = Object {
-        object: gc::Gc::new(ObjectCore::Null),
-    };
-    static TRUE: Object = Object {
-        object: gc::Gc::new(ObjectCore::Boolean(true)),
-    };
-    static FALSE: Object = Object {
-        object: gc::Gc::new(ObjectCore::Boolean(false)),
-    };
+    static NULL: Gc<Object> = Gc::new(Object::Null);
+    static TRUE: Gc<Object> = Gc::new(Object::Boolean(true));
+    static FALSE: Gc<Object> = Gc::new(Object::Boolean(false));
 }
 
 impl Object {
-    pub fn null() -> Object {
+    pub fn null() -> Gc<Object> {
         NULL.with(|x| x.clone())
     }
-    pub fn boolean(value: bool) -> Object {
+    pub fn boolean(value: bool) -> Gc<Object> {
         if value {
             TRUE.with(|x| x.clone())
         } else {
             FALSE.with(|x| x.clone())
         }
     }
-    pub fn integer(value: i64) -> Object {
-        Object {
-            object: gc::Gc::new(ObjectCore::Integer(value)),
-        }
+    pub fn integer(value: i64) -> Gc<Object> {
+        Gc::new(Object::Integer(value))
     }
-    pub fn string(value: String) -> Object {
-        Object {
-            object: gc::Gc::new(ObjectCore::String(value)),
-        }
+    pub fn string(value: String) -> Gc<Object> {
+        Gc::new(Object::String(value))
     }
-    pub fn array(array: Vec<Object>) -> Object {
-        Object {
-            object: gc::Gc::new(ObjectCore::Array(array)),
-        }
+    pub fn array(array: Vec<Gc<Object>>) -> Gc<Object> {
+        Gc::new(Object::Array(array))
     }
     pub fn function(
         parameters: Vec<crate::ast::Identifier>,
         body: crate::ast::BlockStatement,
         env: Environment,
-    ) -> Object {
-        Object {
-            object: gc::Gc::new(ObjectCore::Function(Function {
-                parameters,
-                body,
-                env,
-            })),
-        }
+    ) -> Gc<Object> {
+        Gc::new(Object::Function(Function {
+            parameters,
+            body,
+            env,
+        }))
     }
-    pub fn builtin_function(func: BuiltinFunction) -> Object {
-        Object {
-            object: gc::Gc::new(ObjectCore::BuiltinFunction(func)),
-        }
-    }
-    pub fn core_ref(&self) -> &ObjectCore {
-        &self.object
+    pub fn builtin_function(func: BuiltinFunction) -> Gc<Object> {
+        Gc::new(Object::BuiltinFunction(func))
     }
 }
 
@@ -98,7 +74,7 @@ impl std::fmt::Debug for Function {
 
 #[derive(Clone, Trace, Finalize)]
 pub struct BuiltinFunction {
-    pub func: fn(Vec<Object>) -> Result<Object, QuickReturn>,
+    pub func: fn(Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn>,
 }
 
 impl PartialEq for BuiltinFunction {
@@ -116,30 +92,30 @@ impl std::fmt::Debug for BuiltinFunction {
 }
 
 pub enum QuickReturn {
-    Return(Object),
+    Return(Gc<Object>),
     Error(EvaluationError),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum EvaluationError {
     UnknownInfixOperator {
-        left: Box<Object>,
-        right: Box<Object>,
+        left: Box<Gc<Object>>,
+        right: Box<Gc<Object>>,
         operation: crate::ast::InfixOperationKind,
     },
     UnknownPrefixOperator {
-        right: Box<Object>,
+        right: Box<Gc<Object>>,
         operation: crate::ast::PrefixOperationKind,
     },
     UnknownIdentifier(String),
-    NonBooleanCondition(Object),
-    CallNonFunction(Object),
+    NonBooleanCondition(Gc<Object>),
+    CallNonFunction(Gc<Object>),
     WrongArgumentCount {
         function: Function,
         expected: usize,
         actual: usize,
     },
     BuiltinFunctionError(String),
-    IndexNotSupported(Object),
-    IndexingWithNonInteger(Object),
+    IndexNotSupported(Gc<Object>),
+    IndexingWithNonInteger(Gc<Object>),
 }
