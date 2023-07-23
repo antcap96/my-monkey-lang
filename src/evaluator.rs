@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ast::Expression;
 use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
@@ -62,6 +64,24 @@ fn eval_expression(
                 .map(|expression| eval_expression(expression, environment))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
+        Expression::HashLiteral(literal) => {
+            let evaluated_literal = literal
+                .iter()
+                .map(|(key, value)| {
+                    Ok((
+                        eval_expression(key, environment)?,
+                        eval_expression(value, environment)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut hashmap = HashMap::new();
+            for (key, value) in evaluated_literal {
+                let hashed_key = crate::object::HashableObject::from_object(&key)
+                    .map_err(|e| QuickReturn::Error(e))?;
+                hashmap.insert(hashed_key, (key, value));
+            }
+            Ok(Object::hash(hashmap))
+        }
         Expression::Identifier(identifier) => environment.get(&identifier.name).ok_or(
             QuickReturn::Error(EvaluationError::UnknownIdentifier(identifier.name.clone())),
         ),

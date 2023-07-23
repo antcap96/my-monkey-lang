@@ -20,6 +20,7 @@ pub enum Token {
     LessThan,
 
     Comma,
+    Colon,
     SemiColon,
     LParen,
     RParen,
@@ -123,6 +124,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 }
                 '+' => Token::Plus,
                 ',' => Token::Comma,
+                ':' => Token::Colon,
                 ';' => Token::SemiColon,
                 '(' => Token::LParen,
                 ')' => Token::RParen,
@@ -302,6 +304,22 @@ fn test5() {
         Token::NotEqual,
         Token::Int("9".to_owned()),
         Token::SemiColon,
+    ];
+
+    assert_eq!(output, expected_output)
+}
+
+#[test]
+fn test6() {
+    let input = "{1: 2}";
+
+    let output = Tokenizer::new(input).collect::<Vec<_>>();
+    let expected_output = vec![
+        Token::LBrace,
+        Token::Int("1".to_owned()),
+        Token::Colon,
+        Token::Int("2".to_owned()),
+        Token::RBrace,
     ];
 
     assert_eq!(output, expected_output)

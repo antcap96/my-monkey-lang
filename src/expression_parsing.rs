@@ -87,6 +87,38 @@ fn parse_array_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
     Ok(Expression::ArrayLiteral(expressions))
 }
 
+fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
+    let mut pairs = Vec::new();
+
+    loop {
+        let next = parser.iter.next();
+        let key = match next {
+            Some(Token::RBrace) => return Ok(Expression::HashLiteral(pairs)),
+            None => {
+                return Err(ParseError::PrematureEndOfInput {
+                    expected: Expected::Token(Token::RBrace),
+                })
+            }
+            Some(token) => parser.parse_expression(Precedence::Lowest, token)?,
+        };
+
+        let next = parser.iter.next();
+        let Some(Token::Colon) = next else {return Err(ParseError::unexpected_token(Token::Colon, next))};
+
+        let Some(next) = parser.iter.next() else {return Err(ParseError::premature_end_expected_expression())};
+        let value = parser.parse_expression(Precedence::Lowest, next)?;
+
+        pairs.push((key, value));
+
+        let next = parser.iter.next();
+        match next {
+            Some(Token::Comma) => {}
+            Some(Token::RBrace) => return Ok(Expression::HashLiteral(pairs)),
+            next => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+        }
+    }
+}
+
 fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
     let token = parser
         .iter
@@ -187,6 +219,7 @@ pub fn prefix_parsing(token: Token, parser: &mut Parser) -> Result<Expression, P
         Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
         Token::LParen => parse_grouped_expression(parser),
         Token::LBracket => parse_array_literal(parser),
+        Token::LBrace => parse_hash_literal(parser),
         Token::If => parse_if_expression(parser),
         Token::Function => parse_function_literal(parser),
         _ => Err(ParseError::NoPrefixFunction(token)),
