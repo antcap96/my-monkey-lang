@@ -1,4 +1,5 @@
 use gc::{Finalize, Gc, Trace};
+use std::{collections::HashMap, hash::Hash};
 
 use crate::environment::Environment;
 
@@ -8,6 +9,7 @@ pub enum Object {
     Boolean(bool),
     String(String),
     Array(Vec<Gc<Object>>),
+    Hash(HashMap<HashableObject, (Gc<Object>, Gc<Object>)>),
     Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
@@ -38,6 +40,9 @@ impl Object {
     }
     pub fn array(array: Vec<Gc<Object>>) -> Gc<Object> {
         Gc::new(Object::Array(array))
+    }
+    pub fn hash(hash: HashMap<HashableObject, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
+        Gc::new(Object::Hash(hash))
     }
     pub fn function(
         parameters: Vec<crate::ast::Identifier>,
@@ -118,4 +123,23 @@ pub enum EvaluationError {
     BuiltinFunctionError(String),
     IndexNotSupported(Gc<Object>),
     IndexingWithNonInteger(Gc<Object>),
+    InvalidHashKey(Gc<Object>),
+}
+
+#[derive(Debug, PartialEq, Clone, Trace, Finalize, Eq, Hash)]
+pub enum HashableObject {
+    Integer(i64),
+    Boolean(bool),
+    String(String),
+}
+
+impl HashableObject {
+    pub fn from_object(object: &Gc<Object>) -> Result<Self, EvaluationError> {
+        match object.as_ref() {
+            Object::Integer(value) => Ok(Self::Integer(*value)),
+            Object::Boolean(value) => Ok(Self::Boolean(*value)),
+            Object::String(value) => Ok(Self::String(value.clone())),
+            _ => Err(EvaluationError::InvalidHashKey(object.clone())),
+        }
+    }
 }

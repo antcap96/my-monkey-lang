@@ -25,6 +25,7 @@ pub enum Expression {
     StringLiteral(String),
     BooleanLiteral(bool),
     ArrayLiteral(Vec<Expression>),
+    HashLiteral(Vec<(Expression, Expression)>),
     PrefixOperation(PrefixOperationKind, Box<Expression>),
     InfixOperation(InfixOperationKind, Box<Expression>, Box<Expression>),
     IfExpression {
@@ -119,6 +120,16 @@ impl Display for Expression {
                     write!(f, "{}", expr)?;
                 }
                 write!(f, "]")
+            }
+            HashLiteral(hash) => {
+                write!(f, "{{")?;
+                for (i, (key, value)) in hash.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", key, value)?;
+                }
+                write!(f, "}}")
             }
             PrefixOperation(kind, expr) => write!(f, "({}{})", kind.to_str(), expr),
             InfixOperation(kind, left, right) => {
