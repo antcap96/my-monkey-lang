@@ -283,4 +283,27 @@ mod tests {
             assert_eq!(program.to_string(), expected)
         }
     }
+
+    #[test]
+    fn test_function() {
+        let tests = vec![
+            (
+                "let getName = fn(person) { person[\"name\"]; };",
+                "let getName = fn(person) {\n  (person[\"name\"]);\n};\n",
+            ),
+            (
+                "let getName = fn(person) { person[\"name\"] };",
+                "let getName = fn(person) {\n  (person[\"name\"]);\n};\n",
+            ),
+        ];
+
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
+
+            let program = parser.parse_program().unwrap();
+
+            assert_eq!(program.to_string(), expected)
+        }
+    }
 }

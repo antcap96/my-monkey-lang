@@ -148,13 +148,10 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
 fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseError> {
     let mut statements = Vec::new();
 
-    if let Some(Token::RBrace) = parser.iter.next_if(|token| token == &Token::RBrace) {
-        return Ok(BlockStatement { statements });
-    }
-
     loop {
         let next = parser.iter.next();
         match next {
+            Some(Token::RBrace) => return Ok(BlockStatement { statements }),
             None => {
                 return Err(ParseError::PrematureEndOfInput {
                     expected: Expected::Token(Token::RBrace),
