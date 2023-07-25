@@ -76,8 +76,8 @@ fn eval_expression(
                 .collect::<Result<Vec<_>, _>>()?;
             let mut hashmap = HashMap::new();
             for (key, value) in evaluated_literal {
-                let hashed_key = crate::object::HashableObject::from_object(&key)
-                    .map_err(|e| QuickReturn::Error(e))?;
+                let hashed_key =
+                    crate::object::HashableObject::from_object(&key).map_err(QuickReturn::Error)?;
                 hashmap.insert(hashed_key, (key, value));
             }
             Ok(Object::hash(hashmap))
@@ -146,6 +146,14 @@ fn eval_expression(
                 (Object::Array(_), _) => Err(QuickReturn::Error(
                     EvaluationError::IndexingWithNonInteger(index),
                 )),
+                (Object::Hash(hash), _) => {
+                    let hashed_index = crate::object::HashableObject::from_object(&index)
+                        .map_err(QuickReturn::Error)?;
+                    Ok(hash
+                        .get(&hashed_index)
+                        .map(|(_, value)| value.clone())
+                        .unwrap_or(Object::null()))
+                }
                 _ => Err(QuickReturn::Error(EvaluationError::IndexNotSupported(left))),
             }
         }
