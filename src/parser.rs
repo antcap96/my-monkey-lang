@@ -71,25 +71,26 @@ impl<'a> Parser<'a> {
 
         // XXX: would some like this be possible? `for token in self.iter.by_ref() {`
         while let Some(token) = self.iter.next() {
-            let mut maybe_statement = self.parse_statement(token);
-            match self.iter.peek() {
-                Some(Token::SemiColon) => {
-                    self.iter.next();
-                }
-                None => {}
-                Some(_) => {
-                    maybe_statement = Err(ParseError::unexpected_other(
-                        Expected::Token(Token::SemiColon),
-                        self.iter.next(),
-                    ))
-                }
-            }
-            match maybe_statement {
+            match self.parse_statement(token) {
                 Ok(statement) => {
                     statements.push(statement);
                 }
                 Err(err) => {
                     errors.push(err);
+                }
+            }
+            // Clear until the next semicolon, giving an error if there are
+            // other tokens in between
+            match self.iter.peek() {
+                Some(Token::SemiColon) => {
+                    self.iter.next();
+                }
+                None => {}
+                Some(token) => {
+                    errors.push(ParseError::UnexpectedToken {
+                        expected: Expected::Token(Token::SemiColon),
+                        got: token.clone(),
+                    });
                     for token in self.iter.by_ref() {
                         if token == Token::SemiColon {
                             break;
