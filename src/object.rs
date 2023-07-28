@@ -96,6 +96,7 @@ impl std::fmt::Debug for BuiltinFunction {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum QuickReturn {
     Return(Gc<Object>),
     Error(EvaluationError),
