@@ -206,7 +206,6 @@ fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, 
 }
 
 fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-
     let Some(token) = parser.iter.next() else {return Err(ParseError::premature_end_expected_expression())};
     let expression = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
 
@@ -232,7 +231,10 @@ fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError>
     }
 }
 
-fn parse_match_case(parser: &mut Parser, token: Token) -> Result<crate::ast::MatchCase, ParseError> {
+fn parse_match_case(
+    parser: &mut Parser,
+    token: Token,
+) -> Result<crate::ast::MatchCase, ParseError> {
     let pattern = parser.parse_pattern(token)?;
 
     let next = parser.iter.next();
