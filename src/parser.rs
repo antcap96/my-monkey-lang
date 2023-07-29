@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Identifier, Statement, Pattern},
+    ast::{Identifier, Pattern, Statement},
     expression_parsing::Precedence,
     lexer::Token,
 };
@@ -11,14 +11,6 @@ pub enum ParseError {
     ParseIntError(std::num::ParseIntError),
     NoPrefixFunction(Token),
     InvalidPattern(Token), // TODO: should have more information about the error
-}
-
-impl ParseError {
-    pub fn premature_end_expected_expression() -> Self {
-        ParseError::PrematureEndOfInput {
-            expected: Expected::Expression,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -35,6 +27,12 @@ impl From<std::num::ParseIntError> for ParseError {
 }
 
 impl ParseError {
+    pub fn premature_end_expected_expression() -> Self {
+        ParseError::PrematureEndOfInput {
+            expected: Expected::Expression,
+        }
+    }
+
     pub fn unexpected_token(expected: Token, got: Option<Token>) -> ParseError {
         match got {
             Some(got) => ParseError::UnexpectedToken {
@@ -184,15 +182,53 @@ impl<'a> Parser<'a> {
         Ok(left_expression)
     }
 
-    pub fn parse_pattern(&self, token: Token) -> Result<Pattern, ParseError> {
+    pub fn parse_pattern(&mut self, token: Token) -> Result<Pattern, ParseError> {
         match token {
             Token::Ident(ident) => Ok(Pattern::Identifier(crate::ast::Identifier { name: ident })),
             Token::Int(val) => Ok(Pattern::IntegerLiteral(val.parse()?)),
             Token::String(val) => Ok(Pattern::StringLiteral(val.trim_matches('\"').to_owned())),
             Token::True => Ok(Pattern::BooleanLiteral(true)),
             Token::False => Ok(Pattern::BooleanLiteral(false)),
+            Token::LBracket => Ok(Pattern::ArrayPattern(self.parse_array_pattern()?)),
             other => Err(ParseError::InvalidPattern(other)),
         }
+    }
+
+    pub fn parse_array_pattern(&mut self) -> Result<crate::ast::ArrayPattern, ParseError> {
+        let mut contents = Vec::new();
+        let mut remainder = None;
+
+        loop {
+            match self.iter.next() {
+                Some(Token::RBracket) => break,
+                Some(Token::Ellipsis) => {
+                    let next = self.iter.next();
+                    let Some(Token::Ident(ident)) = next else {
+                        return Err(ParseError::unexpected_other(Expected::Identifier, next))};
+                    remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
+
+                    let next = self.iter.next();
+                    let Some(Token::RBracket) = next else {
+                        return Err(ParseError::unexpected_token(Token::RBracket, next))};
+                    break;
+                }
+                Some(next) => {
+                    contents.push(self.parse_pattern(next)?);
+                }
+                None => return Err(ParseError::premature_end_expected_expression()), // FIXME: not expression, but pattern
+            }
+
+            match self.iter.next() {
+                Some(Token::Comma) => {}
+                Some(Token::RBracket) => break,
+                next => return Err(ParseError::unexpected_token(Token::RBracket, next)),
+            }
+        }
+
+        Ok(crate::ast::ArrayPattern {
+            contents,
+            remainder,
+        })
     }
 }
 

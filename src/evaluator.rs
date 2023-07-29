@@ -316,12 +316,26 @@ trait PatternMatches {
 }
 
 impl PatternMatches for Pattern {
+    // FIXME: matches and populate_environment should be combined into one function
     fn matches(&self, object: &Object) -> bool {
         match (self, object) {
             (Pattern::Identifier(_), _) => true,
             (Pattern::IntegerLiteral(left), Object::Integer(right)) => left == right,
             (Pattern::BooleanLiteral(left), Object::Boolean(right)) => left == right,
             (Pattern::StringLiteral(left), Object::String(right)) => left == right,
+            (Pattern::ArrayPattern(left), Object::Array(right)) => {
+                if (left.contents.len() > right.len())
+                    || (left.remainder.is_none() && (left.contents.len() != right.len()))
+                {
+                    return false;
+                }
+                for (left, right) in left.contents.iter().zip(right.iter()) {
+                    if !left.matches(right) {
+                        return false;
+                    }
+                }
+                true
+            }
             _ => false,
         }
     }
@@ -330,6 +344,18 @@ impl PatternMatches for Pattern {
         match self {
             Pattern::Identifier(identifier) => {
                 environment.set(identifier.name.clone(), object.clone())
+            }
+            Pattern::ArrayPattern(array_pattern) => {
+                let Object::Array(ref other) = *object else {unreachable!()};
+                for (pattern, object) in array_pattern.contents.iter().zip(other.iter()) {
+                    pattern.populate_environment(object.clone(), environment);
+                }
+                if let Some(ref remainder) = array_pattern.remainder {
+                    environment.set(
+                        remainder.name.clone(),
+                        Object::array(other[array_pattern.contents.len()..].to_vec()),
+                    );
+                }
             }
             _ => {}
         }
@@ -456,6 +482,18 @@ mod tests {
                     5 => {4}
                 }"#,
                 Ok(Object::integer(4)),
+            ),
+            (
+                r#"match [1,2,3] {
+                    [1, ...a] => {a}
+                }"#,
+                Ok(Object::array(vec![Object::integer(2), Object::integer(3)])),
+            ),
+            (
+                r#"match [[1, 2], 3] {
+                    [[1, a], 3] => {a}
+                }"#,
+                Ok(Object::integer(2)),
             ),
         ];
 

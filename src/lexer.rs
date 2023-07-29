@@ -29,6 +29,7 @@ pub enum Token {
     LBracket,
     RBracket,
     FatArrow,
+    Ellipsis,
 
     // Keywords
     Function,
@@ -123,13 +124,23 @@ impl<'a> Iterator for Tokenizer<'a> {
                         Token::Equal
                     } else if self.iter.next_if(|(_, ch)| *ch == '>').is_some() {
                         Token::FatArrow
-                    }
-                    else {
+                    } else {
                         Token::Assign
                     }
                 }
                 '+' => Token::Plus,
                 ',' => Token::Comma,
+                '.' => {
+                    if self.iter.next_if(|(_, ch)| *ch == '.').is_some() {
+                        if self.iter.next_if(|(_, ch)| *ch == '.').is_some() {
+                            Token::Ellipsis
+                        } else {
+                            Token::Illegal("..".to_owned())
+                        }
+                    } else {
+                        Token::Illegal(".".to_owned())
+                    }
+                }
                 ':' => Token::Colon,
                 ';' => Token::SemiColon,
                 '(' => Token::LParen,
