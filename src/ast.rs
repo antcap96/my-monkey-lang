@@ -63,8 +63,14 @@ pub enum Pattern {
     IntegerLiteral(i64), // TODO: should there be 3 different types of literals?
     StringLiteral(String),
     BooleanLiteral(bool),
-    // ArrayLiteral{contents: Vec<Pattern>, remainder: Option<Box<Pattern>>},
-    // HashLiteral{contents: Vec<(Pattern, Pattern)>, remainder: Option<Box<Pattern>>},
+    ArrayPattern(ArrayPattern),
+    // HashLiteral{contents: Vec<(Pattern, Pattern)>, remainder: Option<Box<Identifier>>},
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ArrayPattern {
+    pub contents: Vec<Pattern>,
+    pub remainder: Option<Box<Identifier>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -238,6 +244,19 @@ impl Display for Pattern {
             IntegerLiteral(val) => write!(f, "{}", val),
             StringLiteral(val) => write!(f, "\"{}\"", val),
             BooleanLiteral(val) => write!(f, "{}", val),
+            ArrayPattern(arr) => {
+                write!(f, "[")?;
+                for (i, expr) in arr.contents.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", expr)?;
+                }
+                if let Some(remainder) = &arr.remainder {
+                    write!(f, ", ...{}", remainder.name)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
