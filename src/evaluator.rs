@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::Expression;
+use crate::ast::{Expression, Pattern};
 use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
 use gc::Gc;
@@ -157,6 +157,17 @@ fn eval_expression(
                 _ => Err(QuickReturn::Error(EvaluationError::IndexNotSupported(left))),
             }
         }
+        Expression::MatchExpression { expression, cases } => {
+            let object = eval_expression(expression, environment)?;
+            for case in cases {
+                if case.pattern.matches(&object) {
+                    case.pattern
+                        .populate_environment(object.clone(), environment);
+                    return eval_block_statement(&case.body, environment);
+                }
+            }
+            Err(QuickReturn::Error(EvaluationError::NoMatchingCase(object)))
+        }
     }
 }
 
@@ -299,6 +310,32 @@ fn eval_infix_operation(
     }
 }
 
+trait PatternMatches {
+    fn matches(&self, object: &Object) -> bool;
+    fn populate_environment(&self, object: Gc<Object>, environment: &mut Environment);
+}
+
+impl PatternMatches for Pattern {
+    fn matches(&self, object: &Object) -> bool {
+        match (self, object) {
+            (Pattern::Identifier(_), _) => true,
+            (Pattern::IntegerLiteral(left), Object::Integer(right)) => left == right,
+            (Pattern::BooleanLiteral(left), Object::Boolean(right)) => left == right,
+            (Pattern::StringLiteral(left), Object::String(right)) => left == right,
+            _ => false,
+        }
+    }
+
+    fn populate_environment(&self, object: Gc<Object>, environment: &mut Environment) {
+        match self {
+            Pattern::Identifier(identifier) => {
+                environment.set(identifier.name.clone(), object.clone())
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{lexer::Tokenizer, object::Object, parser::Parser};
@@ -389,6 +426,36 @@ mod tests {
                 };
                 func(5)(10)",
                 Ok(Object::integer(15)),
+            ),
+        ];
+
+        for (input, output) in inputs {
+            let tokenizer = Tokenizer::new(input);
+            let mut parser = Parser::new(tokenizer);
+            let ast = parser.parse_program().unwrap();
+            let result = super::eval_program(&ast, &mut super::Environment::new());
+
+            assert_eq!(result, output);
+        }
+    }
+
+    #[test]
+    fn test_match_expression() {
+        let inputs = vec![
+            ("match true {true=>{1}}", Ok(Object::integer(1))),
+            ("match false {true=>{1} false=>{2}}", Ok(Object::integer(2))),
+            (
+                r#"match "asd" {a => {a}}"#,
+                Ok(Object::string("asd".to_owned())),
+            ),
+            (
+                r#"match 5 {
+                    true => {1}
+                    2 => {2}
+                    "asd" => {3}
+                    5 => {4}
+                }"#,
+                Ok(Object::integer(4)),
             ),
         ];
 

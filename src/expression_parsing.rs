@@ -205,6 +205,47 @@ fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, 
     }
 }
 
+fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
+
+    let Some(token) = parser.iter.next() else {return Err(ParseError::premature_end_expected_expression())};
+    let expression = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
+
+    let next = parser.iter.next();
+    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+
+    let mut cases = Vec::new();
+
+    loop {
+        let next = parser.iter.next();
+        match next {
+            Some(Token::RBrace) => return Ok(Expression::MatchExpression { expression, cases }),
+            None => {
+                return Err(ParseError::PrematureEndOfInput {
+                    expected: Expected::Token(Token::RBrace),
+                })
+            }
+            Some(token) => {
+                let case = parse_match_case(parser, token)?;
+                cases.push(case);
+            }
+        }
+    }
+}
+
+fn parse_match_case(parser: &mut Parser, token: Token) -> Result<crate::ast::MatchCase, ParseError> {
+    let pattern = parser.parse_pattern(token)?;
+
+    let next = parser.iter.next();
+    let Some(Token::FatArrow) = next else {return Err(ParseError::unexpected_token(Token::FatArrow, next))};
+
+    let next = parser.iter.next();
+    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+
+    let body = parse_block_statement(parser)?;
+
+    Ok(crate::ast::MatchCase { pattern, body })
+}
+
 pub fn prefix_parsing(token: Token, parser: &mut Parser) -> Result<Expression, ParseError> {
     match token {
         Token::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
@@ -219,6 +260,7 @@ pub fn prefix_parsing(token: Token, parser: &mut Parser) -> Result<Expression, P
         Token::LBrace => parse_hash_literal(parser),
         Token::If => parse_if_expression(parser),
         Token::Function => parse_function_literal(parser),
+        Token::Match => parse_match_expression(parser),
         _ => Err(ParseError::NoPrefixFunction(token)),
     }
 }
