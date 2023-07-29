@@ -157,170 +157,173 @@ impl<'a> Iterator for Tokenizer<'a> {
 }
 
 #[cfg(test)]
-#[test]
-fn test1() {
-    let input = "=+(){},;";
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
+mod tests {
+    use super::*;
+    #[test]
+    fn test1() {
+        let input = "=+(){},;";
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
 
-    assert_eq!(
-        output,
-        vec![
-            Token::Assign,
-            Token::Plus,
-            Token::LParen,
-            Token::RParen,
-            Token::LBrace,
-            Token::RBrace,
-            Token::Comma,
-            Token::SemiColon
-        ]
-    );
-}
+        assert_eq!(
+            output,
+            vec![
+                Token::Assign,
+                Token::Plus,
+                Token::LParen,
+                Token::RParen,
+                Token::LBrace,
+                Token::RBrace,
+                Token::Comma,
+                Token::SemiColon
+            ]
+        );
+    }
 
-#[test]
-fn test2() {
-    let input = "let five = 5;
+    #[test]
+    fn test2() {
+        let input = "let five = 5;
     let ten = 10;
     let add = fn(x, y) {
     x + y;
     };
     let result = add(five, ten);
     ";
-    let expected_output = vec![
-        Token::Let,
-        Token::Ident("five".to_owned()),
-        Token::Assign,
-        Token::Int("5".to_owned()),
-        Token::SemiColon,
-        Token::Let,
-        Token::Ident("ten".to_owned()),
-        Token::Assign,
-        Token::Int("10".to_owned()),
-        Token::SemiColon,
-        Token::Let,
-        Token::Ident("add".to_owned()),
-        Token::Assign,
-        Token::Function,
-        Token::LParen,
-        Token::Ident("x".to_owned()),
-        Token::Comma,
-        Token::Ident("y".to_owned()),
-        Token::RParen,
-        Token::LBrace,
-        Token::Ident("x".to_owned()),
-        Token::Plus,
-        Token::Ident("y".to_owned()),
-        Token::SemiColon,
-        Token::RBrace,
-        Token::SemiColon,
-        Token::Let,
-        Token::Ident("result".to_owned()),
-        Token::Assign,
-        Token::Ident("add".to_owned()),
-        Token::LParen,
-        Token::Ident("five".to_owned()),
-        Token::Comma,
-        Token::Ident("ten".to_owned()),
-        Token::RParen,
-        Token::SemiColon,
-    ];
+        let expected_output = vec![
+            Token::Let,
+            Token::Ident("five".to_owned()),
+            Token::Assign,
+            Token::Int("5".to_owned()),
+            Token::SemiColon,
+            Token::Let,
+            Token::Ident("ten".to_owned()),
+            Token::Assign,
+            Token::Int("10".to_owned()),
+            Token::SemiColon,
+            Token::Let,
+            Token::Ident("add".to_owned()),
+            Token::Assign,
+            Token::Function,
+            Token::LParen,
+            Token::Ident("x".to_owned()),
+            Token::Comma,
+            Token::Ident("y".to_owned()),
+            Token::RParen,
+            Token::LBrace,
+            Token::Ident("x".to_owned()),
+            Token::Plus,
+            Token::Ident("y".to_owned()),
+            Token::SemiColon,
+            Token::RBrace,
+            Token::SemiColon,
+            Token::Let,
+            Token::Ident("result".to_owned()),
+            Token::Assign,
+            Token::Ident("add".to_owned()),
+            Token::LParen,
+            Token::Ident("five".to_owned()),
+            Token::Comma,
+            Token::Ident("ten".to_owned()),
+            Token::RParen,
+            Token::SemiColon,
+        ];
 
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
-    assert_eq!(output, expected_output)
-}
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
+        assert_eq!(output, expected_output)
+    }
 
-#[test]
-fn test3() {
-    let input = "
+    #[test]
+    fn test3() {
+        let input = "
     !-/*5;
     5 < 10 > 5;
     ";
 
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
 
-    let expected_output = vec![
-        Token::Bang,
-        Token::Minus,
-        Token::Slash,
-        Token::Asterisk,
-        Token::Int("5".to_owned()),
-        Token::SemiColon,
-        Token::Int("5".to_owned()),
-        Token::LessThan,
-        Token::Int("10".to_owned()),
-        Token::GreaterThan,
-        Token::Int("5".to_owned()),
-        Token::SemiColon,
-    ];
+        let expected_output = vec![
+            Token::Bang,
+            Token::Minus,
+            Token::Slash,
+            Token::Asterisk,
+            Token::Int("5".to_owned()),
+            Token::SemiColon,
+            Token::Int("5".to_owned()),
+            Token::LessThan,
+            Token::Int("10".to_owned()),
+            Token::GreaterThan,
+            Token::Int("5".to_owned()),
+            Token::SemiColon,
+        ];
 
-    assert_eq!(output, expected_output)
-}
+        assert_eq!(output, expected_output)
+    }
 
-#[test]
-fn test4() {
-    let input = "if (5 < 10) {
+    #[test]
+    fn test4() {
+        let input = "if (5 < 10) {
     return true;
     } else {
     return false;
     }";
 
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
 
-    let expected_output = vec![
-        Token::If,
-        Token::LParen,
-        Token::Int("5".to_owned()),
-        Token::LessThan,
-        Token::Int("10".to_owned()),
-        Token::RParen,
-        Token::LBrace,
-        Token::Return,
-        Token::True,
-        Token::SemiColon,
-        Token::RBrace,
-        Token::Else,
-        Token::LBrace,
-        Token::Return,
-        Token::False,
-        Token::SemiColon,
-        Token::RBrace,
-    ];
+        let expected_output = vec![
+            Token::If,
+            Token::LParen,
+            Token::Int("5".to_owned()),
+            Token::LessThan,
+            Token::Int("10".to_owned()),
+            Token::RParen,
+            Token::LBrace,
+            Token::Return,
+            Token::True,
+            Token::SemiColon,
+            Token::RBrace,
+            Token::Else,
+            Token::LBrace,
+            Token::Return,
+            Token::False,
+            Token::SemiColon,
+            Token::RBrace,
+        ];
 
-    assert_eq!(output, expected_output)
-}
+        assert_eq!(output, expected_output)
+    }
 
-#[test]
-fn test5() {
-    let input = "10 == 10;
+    #[test]
+    fn test5() {
+        let input = "10 == 10;
     10 != 9;";
 
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
-    let expected_output = vec![
-        Token::Int("10".to_owned()),
-        Token::Equal,
-        Token::Int("10".to_owned()),
-        Token::SemiColon,
-        Token::Int("10".to_owned()),
-        Token::NotEqual,
-        Token::Int("9".to_owned()),
-        Token::SemiColon,
-    ];
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
+        let expected_output = vec![
+            Token::Int("10".to_owned()),
+            Token::Equal,
+            Token::Int("10".to_owned()),
+            Token::SemiColon,
+            Token::Int("10".to_owned()),
+            Token::NotEqual,
+            Token::Int("9".to_owned()),
+            Token::SemiColon,
+        ];
 
-    assert_eq!(output, expected_output)
-}
+        assert_eq!(output, expected_output)
+    }
 
-#[test]
-fn test6() {
-    let input = "{1: 2}";
+    #[test]
+    fn test6() {
+        let input = "{1: 2}";
 
-    let output = Tokenizer::new(input).collect::<Vec<_>>();
-    let expected_output = vec![
-        Token::LBrace,
-        Token::Int("1".to_owned()),
-        Token::Colon,
-        Token::Int("2".to_owned()),
-        Token::RBrace,
-    ];
+        let output = Tokenizer::new(input).collect::<Vec<_>>();
+        let expected_output = vec![
+            Token::LBrace,
+            Token::Int("1".to_owned()),
+            Token::Colon,
+            Token::Int("2".to_owned()),
+            Token::RBrace,
+        ];
 
-    assert_eq!(output, expected_output)
+        assert_eq!(output, expected_output)
+    }
 }
