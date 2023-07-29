@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Identifier, Statement},
+    ast::{Identifier, Statement, Pattern},
     expression_parsing::Precedence,
     lexer::Token,
 };
@@ -10,6 +10,7 @@ pub enum ParseError {
     UnexpectedToken { expected: Expected, got: Token },
     ParseIntError(std::num::ParseIntError),
     NoPrefixFunction(Token),
+    InvalidPattern(Token), // TODO: should have more information about the error
 }
 
 impl ParseError {
@@ -161,7 +162,7 @@ impl<'a> Parser<'a> {
     pub fn parse_expression(
         &mut self,
         precedence: Precedence,
-        token: Token,
+        token: Token, // consider taking an Option<Token> instead, and returning an error if it's None
     ) -> Result<crate::ast::Expression, ParseError> {
         let mut left_expression = crate::expression_parsing::prefix_parsing(token, self)?;
 
@@ -181,6 +182,17 @@ impl<'a> Parser<'a> {
         }
 
         Ok(left_expression)
+    }
+
+    pub fn parse_pattern(&self, token: Token) -> Result<Pattern, ParseError> {
+        match token {
+            Token::Ident(ident) => Ok(Pattern::Identifier(crate::ast::Identifier { name: ident })),
+            Token::Int(val) => Ok(Pattern::IntegerLiteral(val.parse()?)),
+            Token::String(val) => Ok(Pattern::StringLiteral(val.trim_matches('\"').to_owned())),
+            Token::True => Ok(Pattern::BooleanLiteral(true)),
+            Token::False => Ok(Pattern::BooleanLiteral(false)),
+            other => Err(ParseError::InvalidPattern(other)),
+        }
     }
 }
 

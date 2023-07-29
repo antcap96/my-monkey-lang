@@ -125,6 +125,7 @@ pub enum EvaluationError {
     IndexNotSupported(Gc<Object>),
     IndexingWithNonInteger(Gc<Object>),
     InvalidHashKey(Gc<Object>),
+    NoMatchingCase(Gc<Object>),
 }
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize, Eq, Hash)]

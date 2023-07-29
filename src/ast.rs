@@ -45,6 +45,26 @@ pub enum Expression {
         left: Box<Expression>,
         index: Box<Expression>,
     },
+    MatchExpression {
+        expression: Box<Expression>,
+        cases: Vec<MatchCase>,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MatchCase {
+    pub pattern: Pattern,
+    pub body: BlockStatement,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Pattern {
+    Identifier(Identifier),
+    IntegerLiteral(i64), // TODO: should there be 3 different types of literals?
+    StringLiteral(String),
+    BooleanLiteral(bool),
+    // ArrayLiteral{contents: Vec<Pattern>, remainder: Option<Box<Pattern>>},
+    // HashLiteral{contents: Vec<(Pattern, Pattern)>, remainder: Option<Box<Pattern>>},
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -77,7 +97,6 @@ pub struct Program {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BlockStatement {
-    // TODO: Could this be an expression?
     pub statements: Vec<Statement>,
 }
 
@@ -174,6 +193,13 @@ impl Display for Expression {
                 )
             }
             IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
+            MatchExpression { expression, cases } => {
+                write!(f, "match {} {{", expression)?;
+                for case in cases {
+                    write!(f, "{}", case)?;
+                }
+                write!(f, "}}")
+            }
         }
     }
 }
@@ -195,6 +221,24 @@ impl Display for Program {
             writeln!(f, "{}", statement)?;
         }
         Ok(())
+    }
+}
+
+impl Display for MatchCase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} => {}", self.pattern, self.body)
+    }
+}
+
+impl Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Pattern::*;
+        match self {
+            Identifier(ident) => write!(f, "{}", ident.name),
+            IntegerLiteral(val) => write!(f, "{}", val),
+            StringLiteral(val) => write!(f, "\"{}\"", val),
+            BooleanLiteral(val) => write!(f, "{}", val),
+        }
     }
 }
 
