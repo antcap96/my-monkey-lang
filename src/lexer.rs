@@ -28,6 +28,7 @@ pub enum Token {
     RBrace,
     LBracket,
     RBracket,
+    FatArrow,
 
     // Keywords
     Function,
@@ -37,6 +38,7 @@ pub enum Token {
     If,
     Else,
     Return,
+    Match,
 }
 
 static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
@@ -47,6 +49,7 @@ static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
     "if" => Token::If,
     "else" => Token::Else,
     "return" => Token::Return,
+    "match" => Token::Match,
 };
 
 #[derive(Clone)]
@@ -118,7 +121,10 @@ impl<'a> Iterator for Tokenizer<'a> {
                 '=' => {
                     if self.iter.next_if(|(_, ch)| *ch == '=').is_some() {
                         Token::Equal
-                    } else {
+                    } else if self.iter.next_if(|(_, ch)| *ch == '>').is_some() {
+                        Token::FatArrow
+                    }
+                    else {
                         Token::Assign
                     }
                 }
