@@ -336,6 +336,23 @@ impl PatternMatches for Pattern {
                 }
                 true
             }
+            (Pattern::HashPattern(left), Object::Hash(right)) => {
+                if (left.contents.len() > right.len())
+                    || (left.remainder.is_none() && (left.contents.len() != right.len()))
+                {
+                    return false;
+                }
+                for (left_key, left_value) in left.contents.iter() {
+                    if let Some((_right_key, right_value)) = right.get(&left_key) {
+                        if !left_value.matches(right_value) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                true
+            }
             _ => false,
         }
     }
@@ -354,6 +371,26 @@ impl PatternMatches for Pattern {
                     environment.set(
                         remainder.name.clone(),
                         Object::array(other[array_pattern.contents.len()..].to_vec()),
+                    );
+                }
+            }
+            Pattern::HashPattern(ref hash_pattern) => {
+                let Object::Hash(ref other) = *object else {unreachable!()};
+                for (key, pattern) in &hash_pattern.contents {
+                    pattern.populate_environment(other[key].1.clone(), environment);
+                }
+                if let Some(ref remainder) = hash_pattern.remainder {
+                    environment.set(
+                        remainder.name.clone(),
+                        Object::hash(
+                            other
+                                .iter()
+                                .filter(|(key, _)| {
+                                    !hash_pattern.contents.iter().any(|(k, _)| k == *key)
+                                })
+                                .map(|(key, value)| (key.clone(), value.clone()))
+                                .collect(),
+                        ),
                     );
                 }
             }
@@ -494,6 +531,18 @@ mod tests {
                     [[1, a], 3] => {a}
                 }"#,
                 Ok(Object::integer(2)),
+            ),
+            (
+                r#"match {1: "2", false: 4} {
+                    {1: "2", false: a} => {a}
+                }"#,
+                Ok(Object::integer(4)),
+            ),
+            (
+                r#"match {1: {"2": 3}, false: 4, true: 9} {
+                    {1: {"2": b}, false: a, ...c} => {b}
+                }"#,
+                Ok(Object::integer(3)),
             ),
         ];
 

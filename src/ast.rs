@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::object::HashableObject;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
@@ -64,12 +66,18 @@ pub enum Pattern {
     StringLiteral(String),
     BooleanLiteral(bool),
     ArrayPattern(ArrayPattern),
-    // HashLiteral{contents: Vec<(Pattern, Pattern)>, remainder: Option<Box<Identifier>>},
+    HashPattern(HashPattern),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayPattern {
     pub contents: Vec<Pattern>,
+    pub remainder: Option<Box<Identifier>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct HashPattern {
+    pub contents: Vec<(HashableObject, Pattern)>,
     pub remainder: Option<Box<Identifier>>,
 }
 
@@ -257,6 +265,30 @@ impl Display for Pattern {
                 }
                 write!(f, "]")
             }
+            HashPattern(hash) => {
+                write!(f, "[")?;
+                for (i, (key, value)) in hash.contents.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", key, value)?;
+                }
+                if let Some(remainder) = &hash.remainder {
+                    write!(f, ", ...{}", remainder.name)?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
+
+impl Display for HashableObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use HashableObject::*;
+        match self {
+            &Integer(val) => write!(f, "{}", val),
+            String(val) => write!(f, "\"{}\"", val),
+            Boolean(val) => write!(f, "{}", val),
         }
     }
 }
