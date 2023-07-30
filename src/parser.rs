@@ -11,6 +11,7 @@ pub enum ParseError {
     ParseIntError(std::num::ParseIntError),
     NoPrefixFunction(Token),
     InvalidPattern(Token), // TODO: should have more information about the error
+    InvalidLiteral(Token),
 }
 
 #[derive(Debug)]
@@ -18,6 +19,7 @@ pub enum Expected {
     Token(Token),
     Identifier,
     Expression,
+    Pattern,
 }
 
 impl From<std::num::ParseIntError> for ParseError {
@@ -190,6 +192,7 @@ impl<'a> Parser<'a> {
             Token::True => Ok(Pattern::BooleanLiteral(true)),
             Token::False => Ok(Pattern::BooleanLiteral(false)),
             Token::LBracket => Ok(Pattern::ArrayPattern(self.parse_array_pattern()?)),
+            Token::LBrace => Ok(Pattern::HashPattern(self.parse_hash_pattern()?)),
             other => Err(ParseError::InvalidPattern(other)),
         }
     }
@@ -215,7 +218,11 @@ impl<'a> Parser<'a> {
                 Some(next) => {
                     contents.push(self.parse_pattern(next)?);
                 }
-                None => return Err(ParseError::premature_end_expected_expression()), // FIXME: not expression, but pattern
+                None => {
+                    return Err(ParseError::PrematureEndOfInput {
+                        expected: Expected::Pattern,
+                    })
+                }
             }
 
             match self.iter.next() {
@@ -225,7 +232,72 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // TODO: validade pattern:
+        // - no duplicate identifiers
         Ok(crate::ast::ArrayPattern {
+            contents,
+            remainder,
+        })
+    }
+
+    pub fn parse_hash_pattern(&mut self) -> Result<crate::ast::HashPattern, ParseError> {
+        let mut contents = Vec::new();
+        let mut remainder = None;
+
+        loop {
+            match self.iter.next() {
+                Some(Token::RBrace) => break,
+                Some(Token::Ellipsis) => {
+                    let next = self.iter.next();
+                    let Some(Token::Ident(ident)) = next else {
+                        return Err(ParseError::unexpected_other(Expected::Identifier, next))};
+                    remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
+
+                    let next = self.iter.next();
+                    let Some(Token::RBrace) = next else {
+                        return Err(ParseError::unexpected_token(Token::RBrace, next))};
+                    break;
+                }
+                Some(next) => {
+                    //1. parse key literal
+                    let key = match next {
+                        Token::Int(val) => crate::object::HashableObject::Integer(val.parse()?),
+                        Token::String(val) => {
+                            crate::object::HashableObject::String(val.trim_matches('\"').to_owned())
+                        }
+                        Token::True => crate::object::HashableObject::Boolean(true),
+                        Token::False => crate::object::HashableObject::Boolean(false),
+                        _ => return Err(ParseError::InvalidLiteral(next)),
+                    };
+
+                    //2. consume colon
+                    let next = self.iter.next();
+                    let Some(Token::Colon) = next else {
+                        return Err(ParseError::unexpected_token(Token::Colon, next))};
+
+                    //3. parse value
+                    let maybe_next = self.iter.next();
+                    let Some(next) = maybe_next else {return Err(ParseError::PrematureEndOfInput { expected: Expected::Pattern })};
+                    let value = self.parse_pattern(next)?;
+                    contents.push((key, value));
+                }
+                None => {
+                    return Err(ParseError::PrematureEndOfInput {
+                        expected: Expected::Pattern,
+                    })
+                }
+            }
+            // TODO: validade pattern:
+            // - no duplicate keys
+            // - no duplicate identifiers
+            match self.iter.next() {
+                Some(Token::Comma) => {}
+                Some(Token::RBrace) => break,
+                next => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+            }
+        }
+
+        Ok(crate::ast::HashPattern {
             contents,
             remainder,
         })
