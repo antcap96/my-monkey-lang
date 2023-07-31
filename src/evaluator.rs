@@ -160,7 +160,7 @@ fn eval_expression(
         Expression::MatchExpression { expression, cases } => {
             let object = eval_expression(expression, environment)?;
             for case in cases {
-                if let MatchResult::Match(identifiers) = case.pattern.matches(object.clone()) {
+                if let MatchResult::Match(identifiers) = case.pattern.matches(&object) {
                     for (identifier, value) in identifiers {
                         environment.set(identifier.name, value);
                     }
@@ -317,11 +317,11 @@ enum MatchResult {
 }
 
 trait PatternMatches {
-    fn matches(&self, object: Gc<Object>) -> MatchResult;
+    fn matches(&self, object: &Gc<Object>) -> MatchResult;
 }
 
 impl PatternMatches for Pattern {
-    fn matches(&self, object: Gc<Object>) -> MatchResult {
+    fn matches(&self, object: &Gc<Object>) -> MatchResult {
         match (self, object.as_ref()) {
             (Pattern::Identifier(ident), _) => {
                 MatchResult::Match(vec![(ident.clone(), object.clone())])
@@ -355,7 +355,7 @@ impl PatternMatches for Pattern {
                     return MatchResult::NoMatch;
                 }
                 for (left, right) in left.contents.iter().zip(right.iter()) {
-                    if let MatchResult::Match(vec) = left.matches(right.clone()) {
+                    if let MatchResult::Match(vec) = left.matches(right) {
                         identifiers.extend(vec);
                     } else {
                         return MatchResult::NoMatch;
@@ -378,7 +378,7 @@ impl PatternMatches for Pattern {
                 }
                 for (left_key, left_value) in left.contents.iter() {
                     if let Some((_right_key, right_value)) = right.get(&left_key) {
-                        if let MatchResult::Match(vec) = left_value.matches(right_value.clone()) {
+                        if let MatchResult::Match(vec) = left_value.matches(right_value) {
                             identifiers.extend(vec);
                         } else {
                             return MatchResult::NoMatch;
