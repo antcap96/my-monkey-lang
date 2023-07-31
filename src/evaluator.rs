@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::{Expression, Pattern};
+use crate::ast::{Expression, Identifier, Pattern};
 use crate::environment::Environment;
 use crate::object::{EvaluationError, Object, QuickReturn};
 use gc::Gc;
@@ -160,9 +160,10 @@ fn eval_expression(
         Expression::MatchExpression { expression, cases } => {
             let object = eval_expression(expression, environment)?;
             for case in cases {
-                if case.pattern.matches(&object) {
-                    case.pattern
-                        .populate_environment(object.clone(), environment);
+                if let MatchResult::Match(identifiers) = case.pattern.matches(object.clone()) {
+                    for (identifier, value) in identifiers {
+                        environment.set(identifier.name, value);
+                    }
                     return eval_block_statement(&case.body, environment);
                 }
             }
@@ -310,91 +311,97 @@ fn eval_infix_operation(
     }
 }
 
+enum MatchResult {
+    Match(Vec<(Identifier, Gc<Object>)>),
+    NoMatch,
+}
+
 trait PatternMatches {
-    fn matches(&self, object: &Object) -> bool;
-    fn populate_environment(&self, object: Gc<Object>, environment: &mut Environment);
+    fn matches(&self, object: Gc<Object>) -> MatchResult;
 }
 
 impl PatternMatches for Pattern {
-    // FIXME: matches and populate_environment should be combined into one function
-    fn matches(&self, object: &Object) -> bool {
-        match (self, object) {
-            (Pattern::Identifier(_), _) => true,
-            (Pattern::IntegerLiteral(left), Object::Integer(right)) => left == right,
-            (Pattern::BooleanLiteral(left), Object::Boolean(right)) => left == right,
-            (Pattern::StringLiteral(left), Object::String(right)) => left == right,
+    fn matches(&self, object: Gc<Object>) -> MatchResult {
+        match (self, object.as_ref()) {
+            (Pattern::Identifier(ident), _) => {
+                MatchResult::Match(vec![(ident.clone(), object.clone())])
+            }
+            (Pattern::IntegerLiteral(left), Object::Integer(right)) => {
+                if left == right {
+                    MatchResult::Match(vec![])
+                } else {
+                    MatchResult::NoMatch
+                }
+            }
+            (Pattern::BooleanLiteral(left), Object::Boolean(right)) => {
+                if left == right {
+                    MatchResult::Match(vec![])
+                } else {
+                    MatchResult::NoMatch
+                }
+            }
+            (Pattern::StringLiteral(left), Object::String(right)) => {
+                if left == right {
+                    MatchResult::Match(vec![])
+                } else {
+                    MatchResult::NoMatch
+                }
+            }
             (Pattern::ArrayPattern(left), Object::Array(right)) => {
+                let mut identifiers = Vec::new();
                 if (left.contents.len() > right.len())
                     || (left.remainder.is_none() && (left.contents.len() != right.len()))
                 {
-                    return false;
+                    return MatchResult::NoMatch;
                 }
                 for (left, right) in left.contents.iter().zip(right.iter()) {
-                    if !left.matches(right) {
-                        return false;
+                    if let MatchResult::Match(vec) = left.matches(right.clone()) {
+                        identifiers.extend(vec);
+                    } else {
+                        return MatchResult::NoMatch;
                     }
                 }
-                true
+                if let Some(ref remainder) = left.remainder {
+                    identifiers.push((
+                        *remainder.clone(),
+                        Object::array(right[left.contents.len()..].to_vec()),
+                    ));
+                }
+                MatchResult::Match(identifiers)
             }
             (Pattern::HashPattern(left), Object::Hash(right)) => {
+                let mut identifiers = Vec::new();
                 if (left.contents.len() > right.len())
                     || (left.remainder.is_none() && (left.contents.len() != right.len()))
                 {
-                    return false;
+                    return MatchResult::NoMatch;
                 }
                 for (left_key, left_value) in left.contents.iter() {
                     if let Some((_right_key, right_value)) = right.get(&left_key) {
-                        if !left_value.matches(right_value) {
-                            return false;
+                        if let MatchResult::Match(vec) = left_value.matches(right_value.clone()) {
+                            identifiers.extend(vec);
+                        } else {
+                            return MatchResult::NoMatch;
                         }
                     } else {
-                        return false;
+                        return MatchResult::NoMatch;
                     }
                 }
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn populate_environment(&self, object: Gc<Object>, environment: &mut Environment) {
-        match self {
-            Pattern::Identifier(identifier) => {
-                environment.set(identifier.name.clone(), object.clone())
-            }
-            Pattern::ArrayPattern(array_pattern) => {
-                let Object::Array(ref other) = *object else {unreachable!()};
-                for (pattern, object) in array_pattern.contents.iter().zip(other.iter()) {
-                    pattern.populate_environment(object.clone(), environment);
-                }
-                if let Some(ref remainder) = array_pattern.remainder {
-                    environment.set(
-                        remainder.name.clone(),
-                        Object::array(other[array_pattern.contents.len()..].to_vec()),
-                    );
-                }
-            }
-            Pattern::HashPattern(ref hash_pattern) => {
-                let Object::Hash(ref other) = *object else {unreachable!()};
-                for (key, pattern) in &hash_pattern.contents {
-                    pattern.populate_environment(other[key].1.clone(), environment);
-                }
-                if let Some(ref remainder) = hash_pattern.remainder {
-                    environment.set(
-                        remainder.name.clone(),
+                if let Some(ref remainder) = left.remainder {
+                    identifiers.push((
+                        *remainder.clone(),
                         Object::hash(
-                            other
+                            right
                                 .iter()
-                                .filter(|(key, _)| {
-                                    !hash_pattern.contents.iter().any(|(k, _)| k == *key)
-                                })
+                                .filter(|(key, _)| !left.contents.iter().any(|(k, _)| k == *key))
                                 .map(|(key, value)| (key.clone(), value.clone()))
                                 .collect(),
                         ),
-                    );
+                    ));
                 }
+                MatchResult::Match(identifiers)
             }
-            _ => {}
+            _ => MatchResult::NoMatch,
         }
     }
 }
