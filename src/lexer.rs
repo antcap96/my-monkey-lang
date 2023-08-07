@@ -40,6 +40,7 @@ pub enum Token {
     Else,
     Return,
     Match,
+    Null,
 }
 
 static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
@@ -51,6 +52,7 @@ static KEYWORDS: phf::Map<&str, Token> = phf::phf_map! {
     "else" => Token::Else,
     "return" => Token::Return,
     "match" => Token::Match,
+    "null" => Token::Null,
 };
 
 #[derive(Clone)]

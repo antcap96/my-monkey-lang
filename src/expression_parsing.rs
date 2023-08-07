@@ -255,6 +255,7 @@ pub fn prefix_parsing(token: Token, parser: &mut Parser) -> Result<Expression, P
         Token::String(val) => Ok(Expression::StringLiteral(val.trim_matches('\"').to_owned())),
         Token::True => Ok(Expression::BooleanLiteral(true)),
         Token::False => Ok(Expression::BooleanLiteral(false)),
+        Token::Null => Ok(Expression::NullLiteral),
         Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
         Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
         Token::LParen => parse_grouped_expression(parser),

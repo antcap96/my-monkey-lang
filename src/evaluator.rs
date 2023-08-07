@@ -58,6 +58,7 @@ fn eval_expression(
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
         Expression::StringLiteral(value) => Ok(Object::string(value.clone())),
+        Expression::NullLiteral => Ok(Object::null()),
         Expression::ArrayLiteral(array) => Ok(Object::array(
             array
                 .iter()
@@ -408,7 +409,35 @@ impl PatternMatches for Pattern {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexer::Tokenizer, object::Object, parser::Parser};
+    use crate::{
+        lexer::Tokenizer,
+        object::{EvaluationError, Object},
+        parser::Parser,
+    };
+
+    fn test_evaluation(inputs: Vec<(&str, Result<gc::Gc<Object>, EvaluationError>)>) {
+        for (input, output) in inputs {
+            let tokenizer = Tokenizer::new(input);
+            let mut parser = Parser::new(tokenizer);
+            let ast = parser.parse_program().unwrap();
+            let result = super::eval_program(&ast, &mut super::Environment::new());
+
+            assert_eq!(result, output);
+        }
+    }
+
+    #[test]
+    fn test_literal() {
+        let inputs = vec![
+            ("5;", Ok(Object::integer(5))),
+            ("true;", Ok(Object::boolean(true))),
+            ("false;", Ok(Object::boolean(false))),
+            ("\"hello\";", Ok(Object::string("hello".to_owned()))),
+            ("null;", Ok(Object::null())),
+        ];
+
+        test_evaluation(inputs);
+    }
 
     #[test]
     fn big_test() {
@@ -422,14 +451,7 @@ mod tests {
             ("!!true;", Ok(Object::boolean(true))),
         ];
 
-        for (input, output) in inputs {
-            let tokenizer = Tokenizer::new(input);
-            let mut parser = Parser::new(tokenizer);
-            let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(&ast, &mut super::Environment::new());
-
-            assert_eq!(result, output);
-        }
+        test_evaluation(inputs);
     }
 
     #[test]
@@ -444,14 +466,7 @@ mod tests {
             ),
         ];
 
-        for (input, output) in inputs {
-            let tokenizer = Tokenizer::new(input);
-            let mut parser = Parser::new(tokenizer);
-            let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(&ast, &mut super::Environment::new());
-
-            assert_eq!(result, output);
-        }
+        test_evaluation(inputs);
     }
 
     #[test]
@@ -499,14 +514,7 @@ mod tests {
             ),
         ];
 
-        for (input, output) in inputs {
-            let tokenizer = Tokenizer::new(input);
-            let mut parser = Parser::new(tokenizer);
-            let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(&ast, &mut super::Environment::new());
-
-            assert_eq!(result, output);
-        }
+        test_evaluation(inputs);
     }
 
     #[test]
@@ -524,6 +532,7 @@ mod tests {
                     2 => {2}
                     "asd" => {3}
                     5 => {4}
+                    null => {5}
                 }"#,
                 Ok(Object::integer(4)),
             ),
@@ -553,13 +562,6 @@ mod tests {
             ),
         ];
 
-        for (input, output) in inputs {
-            let tokenizer = Tokenizer::new(input);
-            let mut parser = Parser::new(tokenizer);
-            let ast = parser.parse_program().unwrap();
-            let result = super::eval_program(&ast, &mut super::Environment::new());
-
-            assert_eq!(result, output);
-        }
+        test_evaluation(inputs);
     }
 }
