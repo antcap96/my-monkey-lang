@@ -348,6 +348,7 @@ impl PatternMatches for Pattern {
                     MatchResult::NoMatch
                 }
             }
+            (Pattern::NullLiteral, Object::Null) => MatchResult::Match(vec![]),
             (Pattern::ArrayPattern(left), Object::Array(right)) => {
                 let mut identifiers = Vec::new();
                 if (left.contents.len() > right.len())
