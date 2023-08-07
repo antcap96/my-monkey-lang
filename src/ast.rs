@@ -26,6 +26,7 @@ pub enum Expression {
     IntegerLiteral(i64),
     StringLiteral(String),
     BooleanLiteral(bool),
+    NullLiteral,
     ArrayLiteral(Vec<Expression>),
     HashLiteral(Vec<(Expression, Expression)>),
     PrefixOperation(PrefixOperationKind, Box<Expression>),
@@ -62,9 +63,10 @@ pub struct MatchCase {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Pattern {
     Identifier(Identifier),
-    IntegerLiteral(i64), // TODO: should there be 3 different types of literals?
+    IntegerLiteral(i64), // TODO: should there be 4 different types of literals?
     StringLiteral(String),
     BooleanLiteral(bool),
+    NullLiteral,
     ArrayPattern(ArrayPattern),
     HashPattern(HashPattern),
 }
@@ -144,6 +146,7 @@ impl Display for Expression {
             IntegerLiteral(val) => write!(f, "{}", val),
             StringLiteral(val) => write!(f, "\"{}\"", val),
             BooleanLiteral(val) => write!(f, "{}", val),
+            NullLiteral => write!(f, "null"),
             ArrayLiteral(arr) => {
                 write!(f, "[")?;
                 for (i, expr) in arr.iter().enumerate() {
@@ -252,6 +255,7 @@ impl Display for Pattern {
             IntegerLiteral(val) => write!(f, "{}", val),
             StringLiteral(val) => write!(f, "\"{}\"", val),
             BooleanLiteral(val) => write!(f, "{}", val),
+            NullLiteral => write!(f, "null"),
             ArrayPattern(arr) => {
                 write!(f, "[")?;
                 for (i, expr) in arr.contents.iter().enumerate() {

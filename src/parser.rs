@@ -191,6 +191,7 @@ impl<'a> Parser<'a> {
             Token::String(val) => Ok(Pattern::StringLiteral(val.trim_matches('\"').to_owned())),
             Token::True => Ok(Pattern::BooleanLiteral(true)),
             Token::False => Ok(Pattern::BooleanLiteral(false)),
+            Token::Null => Ok(Pattern::NullLiteral),
             Token::LBracket => Ok(Pattern::ArrayPattern(self.parse_array_pattern()?)),
             Token::LBrace => Ok(Pattern::HashPattern(self.parse_hash_pattern()?)),
             other => Err(ParseError::InvalidPattern(other)),
@@ -306,6 +307,17 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    fn test_parsing(tests: Vec<(&str, &str)>) {
+        for (input, expected) in tests {
+            let tokenizer = crate::lexer::Tokenizer::new(input);
+            let mut parser = crate::parser::Parser::new(tokenizer);
+
+            let program = parser.parse_program().unwrap();
+
+            assert_eq!(program.to_string(), expected)
+        }
+    }
+
     #[test]
     fn test_expression_1() {
         let tests = vec![
@@ -333,14 +345,7 @@ mod tests {
             ),
         ];
 
-        for (input, expected) in tests {
-            let tokenizer = crate::lexer::Tokenizer::new(input);
-            let mut parser = crate::parser::Parser::new(tokenizer);
-
-            let program = parser.parse_program().unwrap();
-
-            assert_eq!(program.to_string(), expected)
-        }
+        test_parsing(tests)
     }
 
     #[test]
@@ -375,14 +380,8 @@ mod tests {
                 "add((((a + b) + ((c * d) / f)) + g));\n",
             ),
         ];
-        for (input, expected) in tests {
-            let tokenizer = crate::lexer::Tokenizer::new(input);
-            let mut parser = crate::parser::Parser::new(tokenizer);
 
-            let program = parser.parse_program().unwrap();
-
-            assert_eq!(program.to_string(), expected)
-        }
+        test_parsing(tests)
     }
 
     #[test]
@@ -395,14 +394,7 @@ mod tests {
             ),
         ];
 
-        for (input, expected) in tests {
-            let tokenizer = crate::lexer::Tokenizer::new(input);
-            let mut parser = crate::parser::Parser::new(tokenizer);
-
-            let program = parser.parse_program().unwrap();
-
-            assert_eq!(program.to_string(), expected)
-        }
+        test_parsing(tests)
     }
 
     #[test]
@@ -418,13 +410,6 @@ mod tests {
             ),
         ];
 
-        for (input, expected) in tests {
-            let tokenizer = crate::lexer::Tokenizer::new(input);
-            let mut parser = crate::parser::Parser::new(tokenizer);
-
-            let program = parser.parse_program().unwrap();
-
-            assert_eq!(program.to_string(), expected)
-        }
+        test_parsing(tests)
     }
 }
