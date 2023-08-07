@@ -1,0 +1,109 @@
+let set_empty = fn() {null};
+let set_add = fn(set, element) {
+    match set {
+        null => {{"value": element, "left": null, "right": null}}
+        {"value": value, "left": left, "right": right} => {
+            if element < value {
+                {"value": value, "left": set_add(left, element), "right": right}
+            } else {
+                if element > value {
+                    {"value": value, "left": left, "right": set_add(right, element)}
+                } else {
+                    set
+                }
+            }
+        }
+    }
+};
+
+let set_remove = fn(set, element) {
+    match set {
+        null => {null}
+        {"value": value, "left": left, "right": right} => {
+            if element < value {
+                {"value": value, "left": set_remove(left, element), "right": right}
+            } else {
+                if element > value {
+                    {"value": value, "left": left, "right": set_remove(right, element)}
+                } else {
+                    if left == null {
+                        right
+                    } else {
+                        if right == null {
+                            left
+                        } else {
+                            let successor = set_min(right);
+                            {"value": successor, "left": left, "right": set_remove(right, successor)}
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+let set_min = fn(set) {
+    match set {
+        null => {null}
+        {"value": value, "left": left, "right": right} => {
+            if left == null {
+                value
+            } else {
+                set_min(left)
+            }
+        }
+    }
+};
+
+let set_max = fn(set) {
+    match set {
+        null => {null}
+        {"value": value, "left": left, "right": right} => {
+            if right == null {
+                value
+            } else {
+                set_max(right)
+            }
+        }
+    }
+};
+
+let set_contains = fn(set, element) {
+    match set {
+        null => {false}
+        {"value": value, "left": left, "right": right} => {
+            if element < value {
+                set_contains(left, element)
+            } else {
+                if element > value {
+                    set_contains(right, element)
+                } else {
+                    true
+                }
+            }
+        }
+    }
+};
+
+let set_show = fn(set) {
+    match set {
+        null => {""}
+        {"value": value, "left": left, "right": right} => {
+            set_show(left) + " " + to_string(value) + " " + set_show(right)
+        }
+    }
+};
+
+let set = set_empty();
+let set = set_add(set, 7);
+let set = set_add(set, 20);
+let set = set_add(set, 71);
+let set = set_add(set, -4);
+let set = set_add(set, 4);
+let set = set_add(set, 6);
+let set = set_add(set, 0);
+let set = set_add(set, 4);
+let set = set_add(set, 5);
+let set = set_add(set, 5);
+
+set_show(set)
