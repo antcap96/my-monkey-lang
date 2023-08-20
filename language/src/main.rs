@@ -7,11 +7,25 @@ mod lexer;
 mod object;
 mod parser;
 mod repl;
+mod runner;
+
+use clap::Parser;
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(author, version, about)]
+struct Cli {
+    path: Option<PathBuf>,
+}
 
 fn main() {
-    repl::start().unwrap();
-    // let tokenizer = lexer::Tokenizer::new("[][1,]");
-    // let mut parser = parser::Parser::new(tokenizer);
-    // let program = parser.parse_program();
-    // dbg!(program);
+    let cli = Cli::parse();
+
+    match cli.path {
+        None => repl::start().unwrap(),
+        Some(path) => {
+            let str = std::fs::read_to_string(path).unwrap();
+            runner::execute(&str).unwrap();
+        }
+    }
 }
