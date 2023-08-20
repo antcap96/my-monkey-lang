@@ -20,7 +20,7 @@ git clone https://github.com/antcap96/my-monkey-lang.git
 2. Navigate to the project directory:
 
 ```bash
-cd my-monkey-lang
+cd my-monkey-lang/language
 ```
 
 3. Build the project:
