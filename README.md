@@ -10,7 +10,7 @@ To get started with the Monkey interpreter, follow these steps:
 
 * Rust: Make sure you have Rust installed on your system. You can download and install it from the official Rust website: https://www.rust-lang.org/.
 
-### Instalation
+### Installation
 1. Clone the repository:
 
 ```bash
