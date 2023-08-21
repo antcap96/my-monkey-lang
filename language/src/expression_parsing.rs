@@ -1,5 +1,5 @@
 use crate::ast::{BlockStatement, Expression};
-use crate::lexer::Token;
+use crate::lexer::TokenKind;
 use crate::parser::{Expected, ParseError, Parser};
 
 #[derive(PartialOrd, PartialEq, Debug)]
@@ -14,18 +14,18 @@ pub enum Precedence {
     Index,
 }
 
-pub fn precedence(token: &Token) -> Precedence {
+pub fn precedence(token: &TokenKind) -> Precedence {
     match token {
-        Token::Equal => Precedence::Equals,
-        Token::NotEqual => Precedence::Equals,
-        Token::LessThan => Precedence::LessGreater,
-        Token::GreaterThan => Precedence::LessGreater,
-        Token::Plus => Precedence::Sum,
-        Token::Minus => Precedence::Sum,
-        Token::Asterisk => Precedence::Product,
-        Token::Slash => Precedence::Product,
-        Token::LParen => Precedence::Call,
-        Token::LBracket => Precedence::Index,
+        TokenKind::Equal => Precedence::Equals,
+        TokenKind::NotEqual => Precedence::Equals,
+        TokenKind::LessThan => Precedence::LessGreater,
+        TokenKind::GreaterThan => Precedence::LessGreater,
+        TokenKind::Plus => Precedence::Sum,
+        TokenKind::Minus => Precedence::Sum,
+        TokenKind::Asterisk => Precedence::Product,
+        TokenKind::Slash => Precedence::Product,
+        TokenKind::LParen => Precedence::Call,
+        TokenKind::LBracket => Precedence::Index,
         _ => Precedence::Lowest,
     }
 }
@@ -54,14 +54,14 @@ fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseErro
     let expression = parser.parse_expression(Precedence::Lowest, next_token)?;
 
     match parser.iter.next() {
-        Some(Token::RParen) => Ok(expression),
-        next => Err(ParseError::unexpected_token(Token::RParen, next)),
+        Some(TokenKind::RParen) => Ok(expression),
+        next => Err(ParseError::unexpected_token(TokenKind::RParen, next)),
     }
 }
 
 fn parse_expression_list(
     parser: &mut Parser,
-    terminator: Token,
+    terminator: TokenKind,
 ) -> Result<Vec<Expression>, ParseError> {
     let mut elements = Vec::new();
 
@@ -75,7 +75,7 @@ fn parse_expression_list(
         }
 
         match parser.iter.next() {
-            Some(Token::Comma) => {}
+            Some(TokenKind::Comma) => {}
             Some(next) if next == terminator => return Ok(elements),
             next => return Err(ParseError::unexpected_token(terminator, next)),
         }
@@ -83,7 +83,7 @@ fn parse_expression_list(
 }
 
 fn parse_array_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let expressions = parse_expression_list(parser, Token::RBracket)?;
+    let expressions = parse_expression_list(parser, TokenKind::RBracket)?;
     Ok(Expression::ArrayLiteral(expressions))
 }
 
@@ -93,17 +93,17 @@ fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
     loop {
         let next = parser.iter.next();
         let key = match next {
-            Some(Token::RBrace) => return Ok(Expression::HashLiteral(pairs)),
+            Some(TokenKind::RBrace) => return Ok(Expression::HashLiteral(pairs)),
             None => {
                 return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(Token::RBrace),
+                    expected: Expected::Token(TokenKind::RBrace),
                 })
             }
             Some(token) => parser.parse_expression(Precedence::Lowest, token)?,
         };
 
         let next = parser.iter.next();
-        let Some(Token::Colon) = next else {return Err(ParseError::unexpected_token(Token::Colon, next))};
+        let Some(TokenKind::Colon) = next else {return Err(ParseError::unexpected_token(TokenKind::Colon, next))};
 
         let Some(next) = parser.iter.next() else {return Err(ParseError::premature_end_expected_expression())};
         let value = parser.parse_expression(Precedence::Lowest, next)?;
@@ -112,9 +112,9 @@ fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
 
         let next = parser.iter.next();
         match next {
-            Some(Token::Comma) => {}
-            Some(Token::RBrace) => return Ok(Expression::HashLiteral(pairs)),
-            next => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+            Some(TokenKind::Comma) => {}
+            Some(TokenKind::RBrace) => return Ok(Expression::HashLiteral(pairs)),
+            next => return Err(ParseError::unexpected_token(TokenKind::RBrace, next)),
         }
     }
 }
@@ -128,13 +128,13 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
     let mut alternative = None;
 
     let next = parser.iter.next();
-    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+    let Some(TokenKind::LBrace) = next else {return Err(ParseError::unexpected_token(TokenKind::LBrace, next))};
 
     let consequence = parse_block_statement(parser)?;
 
-    if parser.iter.next_if(|token| *token == Token::Else).is_some() {
+    if parser.iter.next_if(|token| *token == TokenKind::Else).is_some() {
         let next = parser.iter.next();
-        let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+        let Some(TokenKind::LBrace) = next else {return Err(ParseError::unexpected_token(TokenKind::LBrace, next))};
         alternative = Some(parse_block_statement(parser)?);
     }
 
@@ -151,10 +151,10 @@ fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseErr
     loop {
         let next = parser.iter.next();
         match next {
-            Some(Token::RBrace) => return Ok(BlockStatement { statements }),
+            Some(TokenKind::RBrace) => return Ok(BlockStatement { statements }),
             None => {
                 return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(Token::RBrace),
+                    expected: Expected::Token(TokenKind::RBrace),
                 })
             }
             Some(token) => {
@@ -164,21 +164,21 @@ fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseErr
         }
         let next = parser.iter.next();
         match next {
-            Some(Token::SemiColon) => continue,
-            Some(Token::RBrace) => return Ok(BlockStatement { statements }),
-            _ => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+            Some(TokenKind::SemiColon) => continue,
+            Some(TokenKind::RBrace) => return Ok(BlockStatement { statements }),
+            _ => return Err(ParseError::unexpected_token(TokenKind::RBrace, next)),
         }
     }
 }
 
 fn parse_function_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
     let next = parser.iter.next();
-    let Some(Token::LParen) = next else {return Err(ParseError::unexpected_token(Token::LParen, next))};
+    let Some(TokenKind::LParen) = next else {return Err(ParseError::unexpected_token(TokenKind::LParen, next))};
 
     let parameters = parse_parameters(parser)?;
 
     let next = parser.iter.next();
-    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+    let Some(TokenKind::LBrace) = next else {return Err(ParseError::unexpected_token(TokenKind::LBrace, next))};
 
     let body = parse_block_statement(parser)?;
 
@@ -191,16 +191,16 @@ fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, 
     loop {
         let next = parser.iter.next();
         match next {
-            Some(Token::Ident(name)) => identifiers.push(crate::ast::Identifier { name }),
-            Some(Token::RParen) => return Ok(identifiers), // empty parameter list or tailing comma
-            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+            Some(TokenKind::Ident(name)) => identifiers.push(crate::ast::Identifier { name }),
+            Some(TokenKind::RParen) => return Ok(identifiers), // empty parameter list or tailing comma
+            _ => Err(ParseError::unexpected_token(TokenKind::RParen, next))?,
         }
 
         let next = parser.iter.next();
         match next {
-            Some(Token::Comma) => continue,
-            Some(Token::RParen) => return Ok(identifiers),
-            _ => Err(ParseError::unexpected_token(Token::RParen, next))?,
+            Some(TokenKind::Comma) => continue,
+            Some(TokenKind::RParen) => return Ok(identifiers),
+            _ => Err(ParseError::unexpected_token(TokenKind::RParen, next))?,
         }
     }
 }
@@ -210,17 +210,17 @@ fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError>
     let expression = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
 
     let next = parser.iter.next();
-    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+    let Some(TokenKind::LBrace) = next else {return Err(ParseError::unexpected_token(TokenKind::LBrace, next))};
 
     let mut cases = Vec::new();
 
     loop {
         let next = parser.iter.next();
         match next {
-            Some(Token::RBrace) => return Ok(Expression::MatchExpression { expression, cases }),
+            Some(TokenKind::RBrace) => return Ok(Expression::MatchExpression { expression, cases }),
             None => {
                 return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(Token::RBrace),
+                    expected: Expected::Token(TokenKind::RBrace),
                 })
             }
             Some(token) => {
@@ -233,44 +233,44 @@ fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError>
 
 fn parse_match_case(
     parser: &mut Parser,
-    token: Token,
+    token: TokenKind,
 ) -> Result<crate::ast::MatchCase, ParseError> {
     let pattern = parser.parse_pattern(token)?;
 
     let next = parser.iter.next();
-    let Some(Token::FatArrow) = next else {return Err(ParseError::unexpected_token(Token::FatArrow, next))};
+    let Some(TokenKind::FatArrow) = next else {return Err(ParseError::unexpected_token(TokenKind::FatArrow, next))};
 
     let next = parser.iter.next();
-    let Some(Token::LBrace) = next else {return Err(ParseError::unexpected_token(Token::LBrace, next))};
+    let Some(TokenKind::LBrace) = next else {return Err(ParseError::unexpected_token(TokenKind::LBrace, next))};
 
     let body = parse_block_statement(parser)?;
 
     Ok(crate::ast::MatchCase { pattern, body })
 }
 
-pub fn prefix_parsing(token: Token, parser: &mut Parser) -> Result<Expression, ParseError> {
+pub fn prefix_parsing(token: TokenKind, parser: &mut Parser) -> Result<Expression, ParseError> {
     match token {
-        Token::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
-        Token::Int(val) => Ok(Expression::IntegerLiteral(val.parse()?)),
-        Token::String(val) => Ok(Expression::StringLiteral(val.trim_matches('\"').to_owned())),
-        Token::True => Ok(Expression::BooleanLiteral(true)),
-        Token::False => Ok(Expression::BooleanLiteral(false)),
-        Token::Null => Ok(Expression::NullLiteral),
-        Token::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
-        Token::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
-        Token::LParen => parse_grouped_expression(parser),
-        Token::LBracket => parse_array_literal(parser),
-        Token::LBrace => parse_hash_literal(parser),
-        Token::If => parse_if_expression(parser),
-        Token::Function => parse_function_literal(parser),
-        Token::Match => parse_match_expression(parser),
+        TokenKind::Ident(name) => Ok(Expression::Identifier(crate::ast::Identifier { name })),
+        TokenKind::Int(val) => Ok(Expression::IntegerLiteral(val.parse()?)),
+        TokenKind::String(val) => Ok(Expression::StringLiteral(val.trim_matches('\"').to_owned())),
+        TokenKind::True => Ok(Expression::BooleanLiteral(true)),
+        TokenKind::False => Ok(Expression::BooleanLiteral(false)),
+        TokenKind::Null => Ok(Expression::NullLiteral),
+        TokenKind::Bang => prefix_operation(crate::ast::PrefixOperationKind::Bang)(parser),
+        TokenKind::Minus => prefix_operation(crate::ast::PrefixOperationKind::Minus)(parser),
+        TokenKind::LParen => parse_grouped_expression(parser),
+        TokenKind::LBracket => parse_array_literal(parser),
+        TokenKind::LBrace => parse_hash_literal(parser),
+        TokenKind::If => parse_if_expression(parser),
+        TokenKind::Function => parse_function_literal(parser),
+        TokenKind::Match => parse_match_expression(parser),
         _ => Err(ParseError::NoPrefixFunction(token)),
     }
 }
 
 type InfixFunction = Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expression, ParseError>>;
 
-fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixFunction {
+fn infix_operation(token: TokenKind, kind: crate::ast::InfixOperationKind) -> InfixFunction {
     Box::new(
         move |left: Expression, parser: &mut Parser| -> Result<Expression, ParseError> {
             let new_precedence = precedence(&token);
@@ -289,7 +289,7 @@ fn infix_operation(token: Token, kind: crate::ast::InfixOperationKind) -> InfixF
 }
 
 fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
-    let arguments = parse_expression_list(parser, Token::RParen)?;
+    let arguments = parse_expression_list(parser, TokenKind::RParen)?;
 
     Ok(Expression::CallExpression {
         function: Box::new(left),
@@ -305,8 +305,8 @@ fn parse_index_expression(left: Expression, parser: &mut Parser) -> Result<Expre
     let index = parser.parse_expression(Precedence::Lowest, next)?;
 
     let next = parser.iter.next();
-    let Some(Token::RBracket) = next else {
-        return Err(ParseError::unexpected_token(Token::RBracket, next));
+    let Some(TokenKind::RBracket) = next else {
+        return Err(ParseError::unexpected_token(TokenKind::RBracket, next));
     };
 
     Ok(Expression::IndexExpression {
@@ -315,20 +315,20 @@ fn parse_index_expression(left: Expression, parser: &mut Parser) -> Result<Expre
     })
 }
 
-pub fn infix_parsing_function(token: Token) -> Option<InfixFunction> {
+pub fn infix_parsing_function(token: TokenKind) -> Option<InfixFunction> {
     use crate::ast::InfixOperationKind as InfixKind;
 
     match token {
-        Token::Plus => Some(infix_operation(Token::Plus, InfixKind::Plus)),
-        Token::Minus => Some(infix_operation(Token::Minus, InfixKind::Minus)),
-        Token::LessThan => Some(infix_operation(Token::LessThan, InfixKind::LessThan)),
-        Token::GreaterThan => Some(infix_operation(Token::GreaterThan, InfixKind::GreaterThan)),
-        Token::Equal => Some(infix_operation(Token::Equal, InfixKind::Equal)),
-        Token::NotEqual => Some(infix_operation(Token::NotEqual, InfixKind::NotEqual)),
-        Token::Asterisk => Some(infix_operation(Token::Asterisk, InfixKind::Multiply)),
-        Token::Slash => Some(infix_operation(Token::Slash, InfixKind::Divide)),
-        Token::LParen => Some(Box::new(parse_call_function)),
-        Token::LBracket => Some(Box::new(parse_index_expression)),
+        TokenKind::Plus => Some(infix_operation(TokenKind::Plus, InfixKind::Plus)),
+        TokenKind::Minus => Some(infix_operation(TokenKind::Minus, InfixKind::Minus)),
+        TokenKind::LessThan => Some(infix_operation(TokenKind::LessThan, InfixKind::LessThan)),
+        TokenKind::GreaterThan => Some(infix_operation(TokenKind::GreaterThan, InfixKind::GreaterThan)),
+        TokenKind::Equal => Some(infix_operation(TokenKind::Equal, InfixKind::Equal)),
+        TokenKind::NotEqual => Some(infix_operation(TokenKind::NotEqual, InfixKind::NotEqual)),
+        TokenKind::Asterisk => Some(infix_operation(TokenKind::Asterisk, InfixKind::Multiply)),
+        TokenKind::Slash => Some(infix_operation(TokenKind::Slash, InfixKind::Divide)),
+        TokenKind::LParen => Some(Box::new(parse_call_function)),
+        TokenKind::LBracket => Some(Box::new(parse_index_expression)),
         _ => None,
     }
 }
