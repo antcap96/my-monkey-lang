@@ -1,22 +1,22 @@
 use crate::{
     ast::{Identifier, Pattern, Statement},
     expression_parsing::Precedence,
-    lexer::Token,
+    lexer::{TokenKind, Token},
 };
 
 #[derive(Debug)]
 pub enum ParseError {
     PrematureEndOfInput { expected: Expected },
-    UnexpectedToken { expected: Expected, got: Token },
+    UnexpectedToken { expected: Expected, got: TokenKind },
     ParseIntError(std::num::ParseIntError),
-    NoPrefixFunction(Token),
-    InvalidPattern(Token), // TODO: should have more information about the error
-    InvalidLiteral(Token),
+    NoPrefixFunction(TokenKind),
+    InvalidPattern(TokenKind), // TODO: should have more information about the error
+    InvalidLiteral(TokenKind),
 }
 
 #[derive(Debug)]
 pub enum Expected {
-    Token(Token),
+    Token(TokenKind),
     Identifier,
     Expression,
     Pattern,
@@ -35,7 +35,7 @@ impl ParseError {
         }
     }
 
-    pub fn unexpected_token(expected: Token, got: Option<Token>) -> ParseError {
+    pub fn unexpected_token(expected: TokenKind, got: Option<TokenKind>) -> ParseError {
         match got {
             Some(got) => ParseError::UnexpectedToken {
                 expected: Expected::Token(expected),
@@ -47,7 +47,7 @@ impl ParseError {
         }
     }
 
-    pub fn unexpected_other(expected: Expected, got: Option<Token>) -> ParseError {
+    pub fn unexpected_other(expected: Expected, got: Option<TokenKind>) -> ParseError {
         match got {
             Some(got) => ParseError::UnexpectedToken { expected, got },
             None => ParseError::PrematureEndOfInput { expected },
@@ -55,13 +55,17 @@ impl ParseError {
     }
 }
 
+fn get_kind(token: Token) -> TokenKind {
+    token.kind
+}
+
 pub struct Parser<'a> {
-    pub iter: std::iter::Peekable<crate::lexer::Tokenizer<'a>>,
+    pub iter: std::iter::Peekable<std::iter::Map<crate::lexer::Tokenizer<'a>, fn(Token) -> TokenKind>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokenizer: crate::lexer::Tokenizer<'a>) -> Self {
-        let iter = tokenizer.peekable();
+        let iter = tokenizer.map(get_kind as fn(Token) -> TokenKind).peekable();
         Self { iter }
     }
 
@@ -83,17 +87,17 @@ impl<'a> Parser<'a> {
             // Clear until the next semicolon, giving an error if there are
             // other tokens in between
             match self.iter.peek() {
-                Some(Token::SemiColon) => {
+                Some(TokenKind::SemiColon) => {
                     self.iter.next();
                 }
                 None => {}
                 Some(token) => {
                     errors.push(ParseError::UnexpectedToken {
-                        expected: Expected::Token(Token::SemiColon),
+                        expected: Expected::Token(TokenKind::SemiColon),
                         got: token.clone(),
                     });
                     for token in self.iter.by_ref() {
-                        if token == Token::SemiColon {
+                        if token == TokenKind::SemiColon {
                             break;
                         }
                     }
@@ -107,10 +111,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_statement(&mut self, token: Token) -> Result<crate::ast::Statement, ParseError> {
+    pub fn parse_statement(&mut self, token: TokenKind) -> Result<crate::ast::Statement, ParseError> {
         match token {
-            Token::Let => Ok(Statement::Let(self.parse_let_statement()?)),
-            Token::Return => Ok(Statement::Return(self.parse_return_statement()?)),
+            TokenKind::Let => Ok(Statement::Let(self.parse_let_statement()?)),
+            TokenKind::Return => Ok(Statement::Return(self.parse_return_statement()?)),
             _ => Ok(Statement::Expression(
                 self.parse_expression_statement(token)?,
             )),
@@ -119,7 +123,7 @@ impl<'a> Parser<'a> {
 
     fn parse_let_statement(&mut self) -> Result<crate::ast::LetStatement, ParseError> {
         let next = self.iter.next();
-        let Some(Token::Ident(name)) = next else {
+        let Some(TokenKind::Ident(name)) = next else {
             return Err(ParseError::unexpected_other(
                 Expected::Identifier,
                 next,
@@ -127,8 +131,8 @@ impl<'a> Parser<'a> {
         };
 
         let next = self.iter.next();
-        let Some(Token::Assign) = next else {
-            return Err(ParseError::unexpected_token(Token::Assign, next))
+        let Some(TokenKind::Assign) = next else {
+            return Err(ParseError::unexpected_token(TokenKind::Assign, next))
         };
 
         let next = self
@@ -154,7 +158,7 @@ impl<'a> Parser<'a> {
     }
     fn parse_expression_statement(
         &mut self,
-        token: Token,
+        token: TokenKind,
     ) -> Result<crate::ast::Expression, ParseError> {
         self.parse_expression(Precedence::Lowest, token)
     }
@@ -162,7 +166,7 @@ impl<'a> Parser<'a> {
     pub fn parse_expression(
         &mut self,
         precedence: Precedence,
-        token: Token, // consider taking an Option<Token> instead, and returning an error if it's None
+        token: TokenKind, // consider taking an Option<Token> instead, and returning an error if it's None
     ) -> Result<crate::ast::Expression, ParseError> {
         let mut left_expression = crate::expression_parsing::prefix_parsing(token, self)?;
 
@@ -170,7 +174,7 @@ impl<'a> Parser<'a> {
             let Some(next_token) = self.iter.peek() else {break};
 
             //TODO: do i need statement_ended? SemiColon would have Precedence::Lowest
-            let statement_ended = next_token == &Token::SemiColon;
+            let statement_ended = next_token == &TokenKind::SemiColon;
             let next_precedence = crate::expression_parsing::precedence(next_token);
             if statement_ended || precedence >= next_precedence {
                 break;
@@ -184,16 +188,16 @@ impl<'a> Parser<'a> {
         Ok(left_expression)
     }
 
-    pub fn parse_pattern(&mut self, token: Token) -> Result<Pattern, ParseError> {
+    pub fn parse_pattern(&mut self, token: TokenKind) -> Result<Pattern, ParseError> {
         match token {
-            Token::Ident(ident) => Ok(Pattern::Identifier(crate::ast::Identifier { name: ident })),
-            Token::Int(val) => Ok(Pattern::IntegerLiteral(val.parse()?)),
-            Token::String(val) => Ok(Pattern::StringLiteral(val.trim_matches('\"').to_owned())),
-            Token::True => Ok(Pattern::BooleanLiteral(true)),
-            Token::False => Ok(Pattern::BooleanLiteral(false)),
-            Token::Null => Ok(Pattern::NullLiteral),
-            Token::LBracket => Ok(Pattern::ArrayPattern(self.parse_array_pattern()?)),
-            Token::LBrace => Ok(Pattern::HashPattern(self.parse_hash_pattern()?)),
+            TokenKind::Ident(ident) => Ok(Pattern::Identifier(crate::ast::Identifier { name: ident })),
+            TokenKind::Int(val) => Ok(Pattern::IntegerLiteral(val.parse()?)),
+            TokenKind::String(val) => Ok(Pattern::StringLiteral(val.trim_matches('\"').to_owned())),
+            TokenKind::True => Ok(Pattern::BooleanLiteral(true)),
+            TokenKind::False => Ok(Pattern::BooleanLiteral(false)),
+            TokenKind::Null => Ok(Pattern::NullLiteral),
+            TokenKind::LBracket => Ok(Pattern::ArrayPattern(self.parse_array_pattern()?)),
+            TokenKind::LBrace => Ok(Pattern::HashPattern(self.parse_hash_pattern()?)),
             other => Err(ParseError::InvalidPattern(other)),
         }
     }
@@ -204,16 +208,16 @@ impl<'a> Parser<'a> {
 
         loop {
             match self.iter.next() {
-                Some(Token::RBracket) => break,
-                Some(Token::Ellipsis) => {
+                Some(TokenKind::RBracket) => break,
+                Some(TokenKind::Ellipsis) => {
                     let next = self.iter.next();
-                    let Some(Token::Ident(ident)) = next else {
+                    let Some(TokenKind::Ident(ident)) = next else {
                         return Err(ParseError::unexpected_other(Expected::Identifier, next))};
                     remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
 
                     let next = self.iter.next();
-                    let Some(Token::RBracket) = next else {
-                        return Err(ParseError::unexpected_token(Token::RBracket, next))};
+                    let Some(TokenKind::RBracket) = next else {
+                        return Err(ParseError::unexpected_token(TokenKind::RBracket, next))};
                     break;
                 }
                 Some(next) => {
@@ -227,9 +231,9 @@ impl<'a> Parser<'a> {
             }
 
             match self.iter.next() {
-                Some(Token::Comma) => {}
-                Some(Token::RBracket) => break,
-                next => return Err(ParseError::unexpected_token(Token::RBracket, next)),
+                Some(TokenKind::Comma) => {}
+                Some(TokenKind::RBracket) => break,
+                next => return Err(ParseError::unexpected_token(TokenKind::RBracket, next)),
             }
         }
 
@@ -247,34 +251,34 @@ impl<'a> Parser<'a> {
 
         loop {
             match self.iter.next() {
-                Some(Token::RBrace) => break,
-                Some(Token::Ellipsis) => {
+                Some(TokenKind::RBrace) => break,
+                Some(TokenKind::Ellipsis) => {
                     let next = self.iter.next();
-                    let Some(Token::Ident(ident)) = next else {
+                    let Some(TokenKind::Ident(ident)) = next else {
                         return Err(ParseError::unexpected_other(Expected::Identifier, next))};
                     remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
 
                     let next = self.iter.next();
-                    let Some(Token::RBrace) = next else {
-                        return Err(ParseError::unexpected_token(Token::RBrace, next))};
+                    let Some(TokenKind::RBrace) = next else {
+                        return Err(ParseError::unexpected_token(TokenKind::RBrace, next))};
                     break;
                 }
                 Some(next) => {
                     //1. parse key literal
                     let key = match next {
-                        Token::Int(val) => crate::object::HashableObject::Integer(val.parse()?),
-                        Token::String(val) => {
+                        TokenKind::Int(val) => crate::object::HashableObject::Integer(val.parse()?),
+                        TokenKind::String(val) => {
                             crate::object::HashableObject::String(val.trim_matches('\"').to_owned())
                         }
-                        Token::True => crate::object::HashableObject::Boolean(true),
-                        Token::False => crate::object::HashableObject::Boolean(false),
+                        TokenKind::True => crate::object::HashableObject::Boolean(true),
+                        TokenKind::False => crate::object::HashableObject::Boolean(false),
                         _ => return Err(ParseError::InvalidLiteral(next)),
                     };
 
                     //2. consume colon
                     let next = self.iter.next();
-                    let Some(Token::Colon) = next else {
-                        return Err(ParseError::unexpected_token(Token::Colon, next))};
+                    let Some(TokenKind::Colon) = next else {
+                        return Err(ParseError::unexpected_token(TokenKind::Colon, next))};
 
                     //3. parse value
                     let maybe_next = self.iter.next();
@@ -292,9 +296,9 @@ impl<'a> Parser<'a> {
             // - no duplicate keys
             // - no duplicate identifiers
             match self.iter.next() {
-                Some(Token::Comma) => {}
-                Some(Token::RBrace) => break,
-                next => return Err(ParseError::unexpected_token(Token::RBrace, next)),
+                Some(TokenKind::Comma) => {}
+                Some(TokenKind::RBrace) => break,
+                next => return Err(ParseError::unexpected_token(TokenKind::RBrace, next)),
             }
         }
 
