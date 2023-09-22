@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::rc::Rc;
 
 use crate::object::HashableObject;
 
@@ -103,7 +104,7 @@ pub enum PrefixOperationKind {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Identifier {
-    pub name: String,
+    pub name: Rc<str>,
 }
 
 #[derive(Debug)]
@@ -188,8 +189,8 @@ impl Display for Expression {
                     "fn({}) {}",
                     parameters
                         .iter()
-                        .map(|id| id.name.as_str())
-                        .collect::<Vec<&str>>()
+                        .map(|id| id.name.as_ref())
+                        .collect::<Box<[&str]>>()
                         .join(", "),
                     body
                 )

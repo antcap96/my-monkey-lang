@@ -1,9 +1,11 @@
+use std::rc::Rc;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenKind {
-    Illegal(String),
-    Ident(String),
-    Int(String),
-    String(String),
+    Illegal(Rc<str>),
+    Ident(Rc<str>),
+    Int(Rc<str>),
+    String(Rc<str>),
 
     // Operators
     Assign,
@@ -50,17 +52,20 @@ pub struct Token {
     pub end: usize,
 }
 
-static KEYWORDS: phf::Map<&str, TokenKind> = phf::phf_map! {
-    "fn" => TokenKind::Function,
-    "let" => TokenKind::Let,
-    "true" => TokenKind::True,
-    "false" => TokenKind::False,
-    "if" => TokenKind::If,
-    "else" => TokenKind::Else,
-    "return" => TokenKind::Return,
-    "match" => TokenKind::Match,
-    "null" => TokenKind::Null,
-};
+fn keywords(ident: &str) -> Option<TokenKind> {
+    match ident {
+        "fn" => Some(TokenKind::Function),
+        "let" => Some(TokenKind::Let),
+        "true" => Some(TokenKind::True),
+        "false" => Some(TokenKind::False),
+        "if" => Some(TokenKind::If),
+        "else" => Some(TokenKind::Else),
+        "return" => Some(TokenKind::Return),
+        "match" => Some(TokenKind::Match),
+        "null" => Some(TokenKind::Null),
+        _ => None,
+    }
+}
 
 #[derive(Clone)]
 pub struct Tokenizer<'a> {
@@ -84,10 +89,7 @@ impl<'a> Tokenizer<'a> {
         let end = self.next_idx();
         let ident = &self.input[start..end];
         Token {
-            kind: KEYWORDS
-                .get(ident)
-                .cloned()
-                .unwrap_or_else(|| TokenKind::Ident(ident.to_owned())),
+            kind: keywords(ident).unwrap_or_else(|| TokenKind::Ident(ident.into())),
             start,
             end,
         }
@@ -100,7 +102,7 @@ impl<'a> Tokenizer<'a> {
         let ident = &self.input[start..end];
 
         Token {
-            kind: TokenKind::Int(ident.to_owned()),
+            kind: TokenKind::Int(ident.into()),
             start,
             end,
         }
@@ -112,7 +114,7 @@ impl<'a> Tokenizer<'a> {
                 Some((_, '"')) => break,
                 None => {
                     return Token {
-                        kind: TokenKind::Illegal("Unterminated string".to_owned()),
+                        kind: TokenKind::Illegal("Unterminated string".into()),
                         start,
                         end: self.next_idx(),
                     }
@@ -124,7 +126,7 @@ impl<'a> Tokenizer<'a> {
         let end = self.next_idx();
         let string = &self.input[start..end];
         Token {
-            kind: TokenKind::String(string.to_owned()),
+            kind: TokenKind::String(string.into()),
             start,
             end,
         }
@@ -187,14 +189,14 @@ impl<'a> Iterator for Tokenizer<'a> {
                             }
                         } else {
                             Token {
-                                kind: TokenKind::Illegal("..".to_owned()),
+                                kind: TokenKind::Illegal("..".into()),
                                 start: idx,
                                 end: self.next_idx(),
                             }
                         }
                     } else {
                         Token {
-                            kind: TokenKind::Illegal(".".to_owned()),
+                            kind: TokenKind::Illegal(".".into()),
                             start: idx,
                             end: self.next_idx(),
                         }
@@ -284,7 +286,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 c if Tokenizer::is_letter(c) => self.read_identifier(idx),
                 c if c.is_ascii_digit() => self.read_number(idx),
                 _ => Token {
-                    kind: TokenKind::Illegal(ch.to_string()),
+                    kind: TokenKind::Illegal(ch.to_string().into()),
                     start: idx,
                     end: self.next_idx(),
                 },
@@ -362,39 +364,39 @@ mod tests {
     ";
         let expected_output = vec![
             TokenKind::Let,
-            TokenKind::Ident("five".to_owned()),
+            TokenKind::Ident("five".into()),
             TokenKind::Assign,
-            TokenKind::Int("5".to_owned()),
+            TokenKind::Int("5".into()),
             TokenKind::SemiColon,
             TokenKind::Let,
-            TokenKind::Ident("ten".to_owned()),
+            TokenKind::Ident("ten".into()),
             TokenKind::Assign,
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::SemiColon,
             TokenKind::Let,
-            TokenKind::Ident("add".to_owned()),
+            TokenKind::Ident("add".into()),
             TokenKind::Assign,
             TokenKind::Function,
             TokenKind::LParen,
-            TokenKind::Ident("x".to_owned()),
+            TokenKind::Ident("x".into()),
             TokenKind::Comma,
-            TokenKind::Ident("y".to_owned()),
+            TokenKind::Ident("y".into()),
             TokenKind::RParen,
             TokenKind::LBrace,
-            TokenKind::Ident("x".to_owned()),
+            TokenKind::Ident("x".into()),
             TokenKind::Plus,
-            TokenKind::Ident("y".to_owned()),
+            TokenKind::Ident("y".into()),
             TokenKind::SemiColon,
             TokenKind::RBrace,
             TokenKind::SemiColon,
             TokenKind::Let,
-            TokenKind::Ident("result".to_owned()),
+            TokenKind::Ident("result".into()),
             TokenKind::Assign,
-            TokenKind::Ident("add".to_owned()),
+            TokenKind::Ident("add".into()),
             TokenKind::LParen,
-            TokenKind::Ident("five".to_owned()),
+            TokenKind::Ident("five".into()),
             TokenKind::Comma,
-            TokenKind::Ident("ten".to_owned()),
+            TokenKind::Ident("ten".into()),
             TokenKind::RParen,
             TokenKind::SemiColon,
         ];
@@ -423,13 +425,13 @@ mod tests {
             TokenKind::Minus,
             TokenKind::Slash,
             TokenKind::Asterisk,
-            TokenKind::Int("5".to_owned()),
+            TokenKind::Int("5".into()),
             TokenKind::SemiColon,
-            TokenKind::Int("5".to_owned()),
+            TokenKind::Int("5".into()),
             TokenKind::LessThan,
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::GreaterThan,
-            TokenKind::Int("5".to_owned()),
+            TokenKind::Int("5".into()),
             TokenKind::SemiColon,
         ];
 
@@ -455,9 +457,9 @@ mod tests {
         let expected_output = vec![
             TokenKind::If,
             TokenKind::LParen,
-            TokenKind::Int("5".to_owned()),
+            TokenKind::Int("5".into()),
             TokenKind::LessThan,
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::RParen,
             TokenKind::LBrace,
             TokenKind::Return,
@@ -488,13 +490,13 @@ mod tests {
 
         let output = Tokenizer::new(input).collect::<Vec<_>>();
         let expected_output = vec![
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::Equal,
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::SemiColon,
-            TokenKind::Int("10".to_owned()),
+            TokenKind::Int("10".into()),
             TokenKind::NotEqual,
-            TokenKind::Int("9".to_owned()),
+            TokenKind::Int("9".into()),
             TokenKind::SemiColon,
         ];
 
@@ -514,9 +516,9 @@ mod tests {
         let output = Tokenizer::new(input).collect::<Vec<_>>();
         let expected_output = vec![
             TokenKind::LBrace,
-            TokenKind::Int("1".to_owned()),
+            TokenKind::Int("1".into()),
             TokenKind::Colon,
-            TokenKind::Int("2".to_owned()),
+            TokenKind::Int("2".into()),
             TokenKind::RBrace,
         ];
 
