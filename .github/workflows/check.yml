@@ -48,9 +48,9 @@ jobs:
           components: clippy
       - name: cargo clippy
         uses: actions-rs/clippy-check@v1
+        working-directory: ./language
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-        working-directory: ./language
   hack:
     runs-on: ubuntu-latest
     name: ubuntu / stable / features
