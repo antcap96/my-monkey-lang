@@ -26,7 +26,6 @@ jobs:
           components: rustfmt
       - name: cargo fmt --check
         run: cargo fmt --check
-        working-directory: ./language
   clippy:
     runs-on: ubuntu-latest
     name: ${{ matrix.toolchain }} / clippy
@@ -48,7 +47,6 @@ jobs:
           components: clippy
       - name: cargo clippy
         uses: actions-rs/clippy-check@v1
-        working-directory: ./language
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
   hack:
@@ -65,4 +63,3 @@ jobs:
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: cargo hack --feature-powerset check
-        working-directory: ./language
