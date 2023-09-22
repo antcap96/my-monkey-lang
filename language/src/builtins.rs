@@ -2,10 +2,13 @@ use crate::object::{BuiltinFunction, EvaluationError, Object, QuickReturn};
 use gc::Gc;
 
 fn unexpected_number_of_arguments_error(expected: usize, got: usize) -> QuickReturn {
-    QuickReturn::Error(EvaluationError::BuiltinFunctionError(format!(
-        "unexpected number of arguments. Expected {} got {}",
-        expected, got
-    )))
+    QuickReturn::Error(EvaluationError::BuiltinFunctionError(
+        format!(
+            "unexpected number of arguments. Expected {} got {}",
+            expected, got
+        )
+        .into(),
+    ))
 }
 
 fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
@@ -20,7 +23,7 @@ fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
             Ok(arr[0].clone())
         }
         _ => Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-            format!("unexpected argument type. Expected Array got {:?}", args[0]),
+            format!("unexpected argument type. Expected Array got {:?}", args[0]).into(),
         ))),
     }
 }
@@ -37,7 +40,7 @@ fn builtin_last(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
             Ok(arr[arr.len() - 1].clone())
         }
         _ => Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-            format!("unexpected argument type. Expected Array got {:?}", args[0]),
+            format!("unexpected argument type. Expected Array got {:?}", args[0]).into(),
         ))),
     }
 }
@@ -53,7 +56,8 @@ fn builtin_len(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
             format!(
                 "unexpected argument type. Expected String got {:?}",
                 args[0]
-            ),
+            )
+            .into(),
         ))),
     }
 }
@@ -69,7 +73,7 @@ fn builtin_push(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
             Ok(Object::array(new_arr))
         }
         _ => Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-            format!("unexpected argument type. Expected Array got {:?}", args[0]),
+            format!("unexpected argument type. Expected Array got {:?}", args[0]).into(),
         ))),
     }
 }
@@ -86,7 +90,7 @@ fn builtin_tail(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
             Ok(Object::array(arr[1..].to_owned()))
         }
         _ => Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-            format!("unexpected argument type. Expected Array got {:?}", args[0]),
+            format!("unexpected argument type. Expected Array got {:?}", args[0]).into(),
         ))),
     }
 }
@@ -168,7 +172,7 @@ mod tests {
         assert_eq!(
             no_arguments,
             Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-                "unexpected number of arguments. Expected 1 got 0".to_owned()
+                "unexpected number of arguments. Expected 1 got 0".into()
             )))
         );
 
@@ -179,7 +183,7 @@ mod tests {
         assert_eq!(
             too_many_arguments,
             Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-                "unexpected number of arguments. Expected 1 got 2".to_owned()
+                "unexpected number of arguments. Expected 1 got 2".into()
             )))
         );
 
@@ -199,7 +203,7 @@ mod tests {
         assert_eq!(
             integer_len,
             Err(QuickReturn::Error(EvaluationError::BuiltinFunctionError(
-                "unexpected argument type. Expected String got Integer(42)".to_owned()
+                "unexpected argument type. Expected String got Integer(42)".into()
             )))
         );
     }

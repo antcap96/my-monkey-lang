@@ -1,5 +1,7 @@
 use gc::{Finalize, Gc, Trace};
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::rc::Rc;
 
 use crate::environment::Environment;
 
@@ -113,7 +115,7 @@ pub enum EvaluationError {
         right: Box<Gc<Object>>,
         operation: crate::ast::PrefixOperationKind,
     },
-    UnknownIdentifier(String),
+    UnknownIdentifier(Rc<str>),
     NonBooleanCondition(Gc<Object>),
     CallNonFunction(Gc<Object>),
     WrongArgumentCount {
@@ -121,7 +123,7 @@ pub enum EvaluationError {
         expected: usize,
         actual: usize,
     },
-    BuiltinFunctionError(String),
+    BuiltinFunctionError(Rc<str>),
     IndexNotSupported(Gc<Object>),
     IndexingWithNonInteger(Gc<Object>),
     InvalidHashKey(Gc<Object>),

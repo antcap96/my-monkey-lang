@@ -1,10 +1,11 @@
 use crate::object::Object;
 use gc::{Finalize, Gc, GcCell, Trace};
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
 pub struct EnvironmentCore {
-    store: HashMap<String, Gc<Object>>,
+    store: HashMap<Rc<str>, Gc<Object>>,
     outer: Option<Environment>,
 }
 
@@ -41,7 +42,7 @@ impl Environment {
             .or(crate::builtins::map_builtins(key).map(crate::object::Object::builtin_function))
     }
 
-    pub fn set(&mut self, key: String, value: Gc<Object>) {
+    pub fn set(&mut self, key: Rc<str>, value: Gc<Object>) {
         self.environment.borrow_mut().store.insert(key, value);
     }
 }
