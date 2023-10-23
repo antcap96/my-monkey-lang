@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::rc::Rc;
 
-use crate::object::HashableObject;
+use gc::{Finalize, Trace};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
@@ -55,6 +55,13 @@ pub enum Expression {
     },
 }
 
+#[derive(Debug, PartialEq, Clone, Eq, Hash, Trace, Finalize)]
+pub enum HashKey {
+    Integer(i64),
+    Boolean(bool),
+    String(String),
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct MatchCase {
     pub pattern: Pattern,
@@ -80,7 +87,7 @@ pub struct ArrayPattern {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct HashPattern {
-    pub contents: Vec<(HashableObject, Pattern)>,
+    pub contents: Vec<(HashKey, Pattern)>,
     pub remainder: Option<Box<Identifier>>,
 }
 
@@ -287,9 +294,9 @@ impl Display for Pattern {
     }
 }
 
-impl Display for HashableObject {
+impl Display for HashKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use HashableObject::*;
+        use HashKey::*;
         match self {
             &Integer(val) => write!(f, "{}", val),
             String(val) => write!(f, "\"{}\"", val),

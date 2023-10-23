@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
         "builtins",
+        "Hashable",
         "peekable",
-        "readline"
+        "readline",
+        "rustyline"
     ]
 }

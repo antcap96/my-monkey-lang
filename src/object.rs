@@ -1,8 +1,8 @@
 use gc::{Finalize, Gc, Trace};
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::rc::Rc;
 
+use crate::ast::HashKey;
 use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
@@ -11,7 +11,7 @@ pub enum Object {
     Boolean(bool),
     String(String),
     Array(Vec<Gc<Object>>),
-    Hash(HashMap<HashableObject, (Gc<Object>, Gc<Object>)>),
+    Hash(HashMap<HashKey, (Gc<Object>, Gc<Object>)>),
     Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
@@ -43,7 +43,7 @@ impl Object {
     pub fn array(array: Vec<Gc<Object>>) -> Gc<Object> {
         Gc::new(Object::Array(array))
     }
-    pub fn hash(hash: HashMap<HashableObject, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
+    pub fn hash(hash: HashMap<HashKey, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
         Gc::new(Object::Hash(hash))
     }
     pub fn function(
@@ -130,20 +130,11 @@ pub enum EvaluationError {
     NoMatchingCase(Gc<Object>),
 }
 
-#[derive(Debug, PartialEq, Clone, Trace, Finalize, Eq, Hash)]
-pub enum HashableObject {
-    Integer(i64),
-    Boolean(bool),
-    String(String),
-}
-
-impl HashableObject {
-    pub fn from_object(object: &Gc<Object>) -> Result<Self, EvaluationError> {
-        match object.as_ref() {
-            Object::Integer(value) => Ok(Self::Integer(*value)),
-            Object::Boolean(value) => Ok(Self::Boolean(*value)),
-            Object::String(value) => Ok(Self::String(value.clone())),
-            _ => Err(EvaluationError::InvalidHashKey(object.clone())),
-        }
+pub fn object_to_key(object: &Gc<Object>) -> Result<HashKey, EvaluationError> {
+    match object.as_ref() {
+        Object::Integer(value) => Ok(HashKey::Integer(*value)),
+        Object::Boolean(value) => Ok(HashKey::Boolean(*value)),
+        Object::String(value) => Ok(HashKey::String(value.clone())),
+        _ => Err(EvaluationError::InvalidHashKey(object.clone())),
     }
 }

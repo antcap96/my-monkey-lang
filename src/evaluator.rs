@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::{Expression, Identifier, Pattern};
 use crate::environment::Environment;
-use crate::object::{EvaluationError, Object, QuickReturn};
+use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
 use gc::Gc;
 
 pub fn eval_program(
@@ -77,8 +77,7 @@ fn eval_expression(
                 .collect::<Result<Vec<_>, _>>()?;
             let mut hashmap = HashMap::new();
             for (key, value) in evaluated_literal {
-                let hashed_key =
-                    crate::object::HashableObject::from_object(&key).map_err(QuickReturn::Error)?;
+                let hashed_key = object_to_key(&key).map_err(QuickReturn::Error)?;
                 hashmap.insert(hashed_key, (key, value));
             }
             Ok(Object::hash(hashmap))
@@ -148,8 +147,7 @@ fn eval_expression(
                     EvaluationError::IndexingWithNonInteger(index),
                 )),
                 (Object::Hash(hash), _) => {
-                    let hashed_index = crate::object::HashableObject::from_object(&index)
-                        .map_err(QuickReturn::Error)?;
+                    let hashed_index = object_to_key(&index).map_err(QuickReturn::Error)?;
                     Ok(hash
                         .get(&hashed_index)
                         .map(|(_, value)| value.clone())

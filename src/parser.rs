@@ -318,12 +318,12 @@ impl<'a> Parser<'a> {
                 Some(next) => {
                     //1. parse key literal
                     let key = match next.kind {
-                        TokenKind::Int(val) => crate::object::HashableObject::Integer(val.parse()?),
+                        TokenKind::Int(val) => crate::ast::HashKey::Integer(val.parse()?),
                         TokenKind::String(val) => {
-                            crate::object::HashableObject::String(val.trim_matches('\"').to_owned())
+                            crate::ast::HashKey::String(val.trim_matches('\"').to_owned())
                         }
-                        TokenKind::True => crate::object::HashableObject::Boolean(true),
-                        TokenKind::False => crate::object::HashableObject::Boolean(false),
+                        TokenKind::True => crate::ast::HashKey::Boolean(true),
+                        TokenKind::False => crate::ast::HashKey::Boolean(false),
                         _ => return Err(ParseError::InvalidLiteral(next)),
                     };
 
