@@ -81,6 +81,7 @@ impl std::fmt::Debug for Function {
 
 #[derive(Clone, Trace, Finalize)]
 pub struct BuiltinFunction {
+    #[allow(clippy::type_complexity)]
     pub func: fn(Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn>,
 }
 

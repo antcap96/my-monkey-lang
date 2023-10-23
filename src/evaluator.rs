@@ -11,7 +11,7 @@ pub fn eval_program(
 ) -> Result<Gc<Object>, EvaluationError> {
     let mut output = Object::null();
     for statement in &program.statements {
-        let result = eval_statement(&statement, environment);
+        let result = eval_statement(statement, environment);
 
         match result {
             Err(QuickReturn::Return(value)) => return Ok(value),
@@ -185,7 +185,7 @@ fn eval_call_function(
         }));
     }
     let arguments = eval_expressions(arguments, environment)?;
-    apply_function(function, arguments).map_err(|err| QuickReturn::Error(err))
+    apply_function(function, arguments).map_err(QuickReturn::Error)
 }
 
 fn eval_call_builtin_function(
@@ -325,59 +325,59 @@ impl PatternMatches for Pattern {
             (Pattern::Identifier(ident), _) => {
                 MatchResult::Match(vec![(ident.clone(), object.clone())])
             }
-            (Pattern::IntegerLiteral(left), Object::Integer(right)) => {
-                if left == right {
+            (Pattern::IntegerLiteral(pattern), Object::Integer(object)) => {
+                if pattern == object {
                     MatchResult::Match(vec![])
                 } else {
                     MatchResult::NoMatch
                 }
             }
-            (Pattern::BooleanLiteral(left), Object::Boolean(right)) => {
-                if left == right {
+            (Pattern::BooleanLiteral(pattern), Object::Boolean(object)) => {
+                if pattern == object {
                     MatchResult::Match(vec![])
                 } else {
                     MatchResult::NoMatch
                 }
             }
-            (Pattern::StringLiteral(left), Object::String(right)) => {
-                if left == right {
+            (Pattern::StringLiteral(pattern), Object::String(object)) => {
+                if pattern == object {
                     MatchResult::Match(vec![])
                 } else {
                     MatchResult::NoMatch
                 }
             }
             (Pattern::NullLiteral, Object::Null) => MatchResult::Match(vec![]),
-            (Pattern::ArrayPattern(left), Object::Array(right)) => {
+            (Pattern::ArrayPattern(pattern), Object::Array(arr)) => {
                 let mut identifiers = Vec::new();
-                if (left.contents.len() > right.len())
-                    || (left.remainder.is_none() && (left.contents.len() != right.len()))
+                if (pattern.contents.len() > arr.len())
+                    || (pattern.remainder.is_none() && (pattern.contents.len() != arr.len()))
                 {
                     return MatchResult::NoMatch;
                 }
-                for (left, right) in left.contents.iter().zip(right.iter()) {
+                for (left, right) in pattern.contents.iter().zip(arr.iter()) {
                     if let MatchResult::Match(vec) = left.matches(right) {
                         identifiers.extend(vec);
                     } else {
                         return MatchResult::NoMatch;
                     }
                 }
-                if let Some(ref remainder) = left.remainder {
+                if let Some(ref remainder) = pattern.remainder {
                     identifiers.push((
                         *remainder.clone(),
-                        Object::array(right[left.contents.len()..].to_vec()),
+                        Object::array(arr[pattern.contents.len()..].to_vec()),
                     ));
                 }
                 MatchResult::Match(identifiers)
             }
-            (Pattern::HashPattern(left), Object::Hash(right)) => {
+            (Pattern::HashPattern(pattern), Object::Hash(hash)) => {
                 let mut identifiers = Vec::new();
-                if (left.contents.len() > right.len())
-                    || (left.remainder.is_none() && (left.contents.len() != right.len()))
+                if (pattern.contents.len() > hash.len())
+                    || (pattern.remainder.is_none() && (pattern.contents.len() != hash.len()))
                 {
                     return MatchResult::NoMatch;
                 }
-                for (left_key, left_value) in left.contents.iter() {
-                    if let Some((_right_key, right_value)) = right.get(&left_key) {
+                for (left_key, left_value) in pattern.contents.iter() {
+                    if let Some((_right_key, right_value)) = hash.get(left_key) {
                         if let MatchResult::Match(vec) = left_value.matches(right_value) {
                             identifiers.extend(vec);
                         } else {
@@ -387,13 +387,13 @@ impl PatternMatches for Pattern {
                         return MatchResult::NoMatch;
                     }
                 }
-                if let Some(ref remainder) = left.remainder {
+                if let Some(ref remainder) = pattern.remainder {
                     identifiers.push((
                         *remainder.clone(),
                         Object::hash(
-                            right
+                            hash
                                 .iter()
-                                .filter(|(key, _)| !left.contents.iter().any(|(k, _)| k == *key))
+                                .filter(|(key, _)| !pattern.contents.iter().any(|(k, _)| k == *key))
                                 .map(|(key, value)| (key.clone(), value.clone()))
                                 .collect(),
                         ),

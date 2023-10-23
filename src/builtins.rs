@@ -17,7 +17,7 @@ fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
     match args[0].as_ref() {
         Object::Array(arr) => {
-            if arr.len() == 0 {
+            if arr.is_empty() {
                 return Ok(Object::null());
             }
             Ok(arr[0].clone())
@@ -34,7 +34,7 @@ fn builtin_last(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
     match args[0].as_ref() {
         Object::Array(arr) => {
-            if arr.len() == 0 {
+            if arr.is_empty() {
                 return Ok(Object::null());
             }
             Ok(arr[arr.len() - 1].clone())
@@ -84,7 +84,7 @@ fn builtin_tail(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
     match args[0].as_ref() {
         Object::Array(arr) => {
-            if arr.len() == 0 {
+            if arr.is_empty() {
                 return Ok(Object::null());
             }
             Ok(Object::array(arr[1..].to_owned()))
