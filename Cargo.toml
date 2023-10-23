@@ -1,11 +1,7 @@
-[package]
-name = "monkey_script"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-clap = { version = "4.3.23", features = ["derive"] }
-gc = { version = "0.4.1", features = ["derive"] }
-rustyline = "11.0.0"
+[workspace]
+members = [
+    "monkey-lang-core",
+    "monkey-lang-interpreter",
+    "monkey-lang-runner",
+]
+resolver = "2"

@@ -2,7 +2,7 @@ use gc::{Finalize, Gc, Trace};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::HashKey;
+use monkey_lang_core::ast;
 use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]
@@ -11,7 +11,7 @@ pub enum Object {
     Boolean(bool),
     String(String),
     Array(Vec<Gc<Object>>),
-    Hash(HashMap<HashKey, (Gc<Object>, Gc<Object>)>),
+    Hash(HashMap<ast::HashKey, (Gc<Object>, Gc<Object>)>),
     Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
@@ -43,12 +43,12 @@ impl Object {
     pub fn array(array: Vec<Gc<Object>>) -> Gc<Object> {
         Gc::new(Object::Array(array))
     }
-    pub fn hash(hash: HashMap<HashKey, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
+    pub fn hash(hash: HashMap<ast::HashKey, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
         Gc::new(Object::Hash(hash))
     }
     pub fn function(
-        parameters: Vec<crate::ast::Identifier>,
-        body: crate::ast::BlockStatement,
+        parameters: Vec<ast::Identifier>,
+        body: ast::BlockStatement,
         env: Environment,
     ) -> Gc<Object> {
         Gc::new(Object::Function(Function {
@@ -65,9 +65,9 @@ impl Object {
 #[derive(PartialEq, Clone, Trace, Finalize)]
 pub struct Function {
     #[unsafe_ignore_trace]
-    pub parameters: Vec<crate::ast::Identifier>,
+    pub parameters: Vec<ast::Identifier>,
     #[unsafe_ignore_trace]
-    pub body: crate::ast::BlockStatement,
+    pub body: ast::BlockStatement,
     pub env: Environment,
 }
 
@@ -110,11 +110,11 @@ pub enum EvaluationError {
     UnknownInfixOperator {
         left: Box<Gc<Object>>,
         right: Box<Gc<Object>>,
-        operation: crate::ast::InfixOperationKind,
+        operation: ast::InfixOperationKind,
     },
     UnknownPrefixOperator {
         right: Box<Gc<Object>>,
-        operation: crate::ast::PrefixOperationKind,
+        operation: ast::PrefixOperationKind,
     },
     UnknownIdentifier(Rc<str>),
     NonBooleanCondition(Gc<Object>),
@@ -131,11 +131,11 @@ pub enum EvaluationError {
     NoMatchingCase(Gc<Object>),
 }
 
-pub fn object_to_key(object: &Gc<Object>) -> Result<HashKey, EvaluationError> {
+pub fn object_to_key(object: &Gc<Object>) -> Result<ast::HashKey, EvaluationError> {
     match object.as_ref() {
-        Object::Integer(value) => Ok(HashKey::Integer(*value)),
-        Object::Boolean(value) => Ok(HashKey::Boolean(*value)),
-        Object::String(value) => Ok(HashKey::String(value.clone())),
+        Object::Integer(value) => Ok(ast::HashKey::Integer(*value)),
+        Object::Boolean(value) => Ok(ast::HashKey::Boolean(*value)),
+        Object::String(value) => Ok(ast::HashKey::String(value.clone())),
         _ => Err(EvaluationError::InvalidHashKey(object.clone())),
     }
 }

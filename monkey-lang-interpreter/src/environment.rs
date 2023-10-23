@@ -46,3 +46,9 @@ impl Environment {
         self.environment.borrow_mut().store.insert(key, value);
     }
 }
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-use crate::ast::{Expression, Identifier, Pattern};
 use crate::environment::Environment;
 use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
 use gc::Gc;
+use monkey_lang_core::ast;
+use monkey_lang_core::ast::{Expression, Pattern};
 
 pub fn eval_program(
-    program: &crate::ast::Program,
+    program: &ast::Program,
     environment: &mut Environment,
 ) -> Result<Gc<Object>, EvaluationError> {
     let mut output = Object::null();
@@ -23,18 +24,18 @@ pub fn eval_program(
 }
 
 fn eval_statement(
-    statement: &crate::ast::Statement,
+    statement: &ast::Statement,
     environment: &mut Environment,
 ) -> Result<Gc<Object>, QuickReturn> {
     match statement {
-        crate::ast::Statement::Expression(expression) => eval_expression(expression, environment),
-        crate::ast::Statement::Return(statement) => eval_return_statement(statement, environment),
-        crate::ast::Statement::Let(statement) => eval_let_statement(statement, environment),
+        ast::Statement::Expression(expression) => eval_expression(expression, environment),
+        ast::Statement::Return(statement) => eval_return_statement(statement, environment),
+        ast::Statement::Let(statement) => eval_let_statement(statement, environment),
     }
 }
 
 fn eval_let_statement(
-    statement: &crate::ast::LetStatement,
+    statement: &ast::LetStatement,
     environment: &mut Environment,
 ) -> Result<Gc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
@@ -43,7 +44,7 @@ fn eval_let_statement(
 }
 
 fn eval_return_statement(
-    statement: &crate::ast::ReturnStatement,
+    statement: &ast::ReturnStatement,
     environment: &mut Environment,
 ) -> Result<Gc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
@@ -225,7 +226,7 @@ fn apply_function(
 }
 
 fn eval_block_statement(
-    block: &crate::ast::BlockStatement,
+    block: &ast::BlockStatement,
     environment: &mut Environment,
 ) -> Result<Gc<Object>, QuickReturn> {
     let mut result = Object::null();
@@ -236,17 +237,13 @@ fn eval_block_statement(
 }
 
 fn eval_prefix_operation(
-    kind: &crate::ast::PrefixOperationKind,
+    kind: &ast::PrefixOperationKind,
     right: Result<Gc<Object>, QuickReturn>,
 ) -> Result<Gc<Object>, QuickReturn> {
     let right = right?;
     match (&kind, right.as_ref()) {
-        (crate::ast::PrefixOperationKind::Bang, Object::Boolean(value)) => {
-            Ok(Object::boolean(!value))
-        }
-        (crate::ast::PrefixOperationKind::Minus, Object::Integer(value)) => {
-            Ok(Object::integer(-value))
-        }
+        (ast::PrefixOperationKind::Bang, Object::Boolean(value)) => Ok(Object::boolean(!value)),
+        (ast::PrefixOperationKind::Minus, Object::Integer(value)) => Ok(Object::integer(-value)),
         _ => Err(QuickReturn::Error(EvaluationError::UnknownPrefixOperator {
             right: Box::new(right),
             operation: kind.clone(),
@@ -255,11 +252,11 @@ fn eval_prefix_operation(
 }
 
 fn eval_infix_operation(
-    kind: &crate::ast::InfixOperationKind,
+    kind: &ast::InfixOperationKind,
     left: Result<Gc<Object>, QuickReturn>,
     right: Result<Gc<Object>, QuickReturn>,
 ) -> Result<Gc<Object>, QuickReturn> {
-    use crate::ast::InfixOperationKind;
+    use ast::InfixOperationKind;
     let left = left?;
     let right = right?;
     match (kind, left.as_ref(), right.as_ref()) {
@@ -311,7 +308,7 @@ fn eval_infix_operation(
 }
 
 enum MatchResult {
-    Match(Vec<(Identifier, Gc<Object>)>),
+    Match(Vec<(ast::Identifier, Gc<Object>)>),
     NoMatch,
 }
 
@@ -391,8 +388,7 @@ impl PatternMatches for Pattern {
                     identifiers.push((
                         *remainder.clone(),
                         Object::hash(
-                            hash
-                                .iter()
+                            hash.iter()
                                 .filter(|(key, _)| !pattern.contents.iter().any(|(k, _)| k == *key))
                                 .map(|(key, value)| (key.clone(), value.clone()))
                                 .collect(),
@@ -408,11 +404,9 @@ impl PatternMatches for Pattern {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        lexer::Tokenizer,
-        object::{EvaluationError, Object},
-        parser::Parser,
-    };
+    use crate::object::{EvaluationError, Object};
+    use monkey_lang_core::lexer::Tokenizer;
+    use monkey_lang_core::parser::Parser;
 
     fn test_evaluation(inputs: Vec<(&str, Result<gc::Gc<Object>, EvaluationError>)>) {
         for (input, output) in inputs {

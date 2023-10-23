@@ -1,8 +1,10 @@
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use crate::environment;
-
+use monkey_lang_core::lexer;
+use monkey_lang_core::parser;
+use monkey_lang_interpreter::environment;
+use monkey_lang_interpreter::evaluator;
 const PROMPT: &str = ">> ";
 
 pub fn start() -> Result<(), ReadlineError> {
@@ -32,14 +34,14 @@ pub fn start() -> Result<(), ReadlineError> {
             }
         }
 
-        let tokenizer = crate::lexer::Tokenizer::new(&content);
+        let tokenizer = lexer::Tokenizer::new(&content);
         // tokenizer.clone().for_each(|token| println!("{:?}", token));
-        let program = crate::parser::Parser::new(tokenizer).parse_program();
+        let program = parser::Parser::new(tokenizer).parse_program();
 
         match program {
             Ok(program) => {
                 // println!("{}", program);
-                let object = crate::evaluator::eval_program(&program, &mut environment);
+                let object = evaluator::eval_program(&program, &mut environment);
 
                 println!("result: {:?}", object)
             }
