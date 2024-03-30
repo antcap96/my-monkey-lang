@@ -2,7 +2,7 @@ use gc::{Finalize, Gc, Trace};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use monkey_lang_core::ast;
+use crate::ast;
 use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Clone, Trace, Finalize)]

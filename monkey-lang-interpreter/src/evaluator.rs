@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::environment::Environment;
 use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
 use gc::Gc;
-use monkey_lang_core::ast;
-use monkey_lang_core::ast::{Expression, Pattern};
+use crate::ast;
+use crate::ast::{Expression, Pattern};
 
 pub fn eval_program(
     program: &ast::Program,
@@ -405,8 +405,8 @@ impl PatternMatches for Pattern {
 #[cfg(test)]
 mod tests {
     use crate::object::{EvaluationError, Object};
-    use monkey_lang_core::lexer::Tokenizer;
-    use monkey_lang_core::parser::Parser;
+    use crate::lexer::Tokenizer;
+    use crate::parser::Parser;
 
     fn test_evaluation(inputs: Vec<(&str, Result<gc::Gc<Object>, EvaluationError>)>) {
         for (input, output) in inputs {
@@ -508,6 +508,25 @@ mod tests {
         ];
 
         test_evaluation(inputs);
+    }
+
+    #[test]
+    fn test_closure() {
+        let inputs = vec![(
+            r#"
+            let fa = fn() {
+                let x = 5;
+                let fb = fn() {
+                    x
+                };
+                fb
+            };
+            let temp = fa();
+            temp()"#,
+            Ok(Object::integer(5)),
+        )];
+
+        test_evaluation(inputs)
     }
 
     #[test]

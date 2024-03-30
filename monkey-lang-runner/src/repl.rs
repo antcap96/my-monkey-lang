@@ -1,8 +1,8 @@
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use monkey_lang_core::lexer;
-use monkey_lang_core::parser;
+use monkey_lang_interpreter::lexer;
+use monkey_lang_interpreter::parser;
 use monkey_lang_interpreter::environment;
 use monkey_lang_interpreter::evaluator;
 const PROMPT: &str = ">> ";

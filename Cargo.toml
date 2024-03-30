@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "monkey-lang-core",
     "monkey-lang-interpreter",
     "monkey-lang-compiler",
     "monkey-lang-runner",
