@@ -82,13 +82,13 @@ pub enum Pattern {
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayPattern {
     pub contents: Vec<Pattern>,
-    pub remainder: Option<Box<Identifier>>,
+    pub remainder: Option<Identifier>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct HashPattern {
     pub contents: Vec<(HashKey, Pattern)>,
-    pub remainder: Option<Box<Identifier>>,
+    pub remainder: Option<Identifier>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

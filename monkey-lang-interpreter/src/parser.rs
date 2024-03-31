@@ -238,7 +238,7 @@ impl<'a> Parser<'a> {
                     else {
                         return Err(ParseError::unexpected_other(Expected::Identifier, next));
                     };
-                    remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
+                    remainder = Some(crate::ast::Identifier { name: ident });
 
                     let next = self.iter.next();
                     let Some(Token {
@@ -273,7 +273,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // TODO: validade pattern:
+        // TODO: validate pattern:
         // - no duplicate identifiers
         Ok(crate::ast::ArrayPattern {
             contents,
@@ -303,7 +303,7 @@ impl<'a> Parser<'a> {
                     else {
                         return Err(ParseError::unexpected_other(Expected::Identifier, next));
                     };
-                    remainder = Some(Box::new(crate::ast::Identifier { name: ident }));
+                    remainder = Some(crate::ast::Identifier { name: ident });
 
                     let next = self.iter.next();
                     let Some(Token {
@@ -353,7 +353,7 @@ impl<'a> Parser<'a> {
                     })
                 }
             }
-            // TODO: validade pattern:
+            // TODO: validate pattern:
             // - no duplicate keys
             // - no duplicate identifiers
             match self.iter.next() {

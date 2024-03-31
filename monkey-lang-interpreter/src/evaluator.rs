@@ -218,6 +218,8 @@ fn apply_function(
         new_environment.set(parameter.name.clone(), argument.clone());
     }
     let result = eval_block_statement(&function.body, &mut new_environment);
+    // TODO: When the result is a function, new_environment need to be kept as well
+    // Maybe as a element of the Object enum.
     match result {
         Ok(object) => Ok(object),
         Err(QuickReturn::Return(value)) => Ok(value),
@@ -360,7 +362,7 @@ impl PatternMatches for Pattern {
                 }
                 if let Some(ref remainder) = pattern.remainder {
                     identifiers.push((
-                        *remainder.clone(),
+                        remainder.clone(),
                         Object::array(arr[pattern.contents.len()..].to_vec()),
                     ));
                 }
@@ -386,7 +388,7 @@ impl PatternMatches for Pattern {
                 }
                 if let Some(ref remainder) = pattern.remainder {
                     identifiers.push((
-                        *remainder.clone(),
+                        remainder.clone(),
                         Object::hash(
                             hash.iter()
                                 .filter(|(key, _)| !pattern.contents.iter().any(|(k, _)| k == *key))
@@ -524,6 +526,43 @@ mod tests {
             let temp = fa();
             temp()"#,
             Ok(Object::integer(5)),
+        ),
+        (
+            r#"
+            let fa = fn() {
+                let x = 5;
+                let fb = fn() {
+                    fn() { x }
+                };
+                fb
+            };
+            let temp = fa();
+            let temp_ = temp();
+            temp_()"#,
+            Ok(Object::integer(5)),
+        ),
+        (
+            r#"
+            let fa = fn() {
+                let is_even = fn(x) {
+                    if x == 0 {
+                        true
+                    } else {
+                        is_odd(x-1)
+                    }
+                };
+                let is_odd = fn(x) {
+                    if x == 0 {
+                        false
+                    } else {
+                        is_even(x-1)
+                    }
+                };
+                is_even
+            };
+            let temp = fa();
+            temp(1);"#,
+            Ok(Object::boolean(false)),
         )];
 
         test_evaluation(inputs)
