@@ -1,10 +1,10 @@
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use monkey_lang_interpreter::lexer;
-use monkey_lang_interpreter::parser;
 use monkey_lang_interpreter::environment;
 use monkey_lang_interpreter::evaluator;
+use monkey_lang_interpreter::lexer;
+use monkey_lang_interpreter::parser;
 const PROMPT: &str = ">> ";
 
 pub fn start() -> Result<(), ReadlineError> {

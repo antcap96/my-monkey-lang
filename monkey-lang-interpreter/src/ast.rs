@@ -1,8 +1,6 @@
 use std::fmt::Display;
 use std::rc::Rc;
 
-use gc::{Finalize, Trace};
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Let(LetStatement),
@@ -55,7 +53,7 @@ pub enum Expression {
     },
 }
 
-#[derive(Debug, PartialEq, Clone, Eq, Hash, Trace, Finalize)]
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub enum HashKey {
     Integer(i64),
     Boolean(bool),

@@ -1,7 +1,7 @@
-use monkey_lang_interpreter::lexer;
-use monkey_lang_interpreter::parser;
 use monkey_lang_interpreter::environment;
 use monkey_lang_interpreter::evaluator;
+use monkey_lang_interpreter::lexer;
+use monkey_lang_interpreter::parser;
 
 pub fn execute(str: &str) -> Result<(), Vec<parser::ParseError>> {
     let tokenizer = lexer::Tokenizer::new(str);

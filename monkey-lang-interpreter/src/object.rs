@@ -1,74 +1,83 @@
-use gc::{Finalize, Gc, Trace};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast;
-use crate::environment::Environment;
+use crate::environment::{Environment, EnvironmentCore};
 
-#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
     String(String),
-    Array(Vec<Gc<Object>>),
-    Hash(HashMap<ast::HashKey, (Gc<Object>, Gc<Object>)>),
-    Function(Function),
+    Array(Vec<Rc<Object>>),
+    Hash(HashMap<ast::HashKey, (Rc<Object>, Rc<Object>)>),
+    Function(Function, Vec<Environment>),
     BuiltinFunction(BuiltinFunction),
     Null,
 }
 
 thread_local! {
-    static NULL: Gc<Object> = Gc::new(Object::Null);
-    static TRUE: Gc<Object> = Gc::new(Object::Boolean(true));
-    static FALSE: Gc<Object> = Gc::new(Object::Boolean(false));
+    static NULL: Rc<Object> = Rc::new(Object::Null);
+    static TRUE: Rc<Object> = Rc::new(Object::Boolean(true));
+    static FALSE: Rc<Object> = Rc::new(Object::Boolean(false));
 }
 
 impl Object {
-    pub fn null() -> Gc<Object> {
+    pub fn null() -> Rc<Object> {
         NULL.with(|x| x.clone())
     }
-    pub fn boolean(value: bool) -> Gc<Object> {
+    pub fn boolean(value: bool) -> Rc<Object> {
         if value {
             TRUE.with(|x| x.clone())
         } else {
             FALSE.with(|x| x.clone())
         }
     }
-    pub fn integer(value: i64) -> Gc<Object> {
-        Gc::new(Object::Integer(value))
+    pub fn integer(value: i64) -> Rc<Object> {
+        Rc::new(Object::Integer(value))
     }
-    pub fn string(value: String) -> Gc<Object> {
-        Gc::new(Object::String(value))
+    pub fn string(value: String) -> Rc<Object> {
+        Rc::new(Object::String(value))
     }
-    pub fn array(array: Vec<Gc<Object>>) -> Gc<Object> {
-        Gc::new(Object::Array(array))
+    pub fn array(array: Vec<Rc<Object>>) -> Rc<Object> {
+        Rc::new(Object::Array(array))
     }
-    pub fn hash(hash: HashMap<ast::HashKey, (Gc<Object>, Gc<Object>)>) -> Gc<Object> {
-        Gc::new(Object::Hash(hash))
+    pub fn hash(hash: HashMap<ast::HashKey, (Rc<Object>, Rc<Object>)>) -> Rc<Object> {
+        Rc::new(Object::Hash(hash))
     }
     pub fn function(
         parameters: Vec<ast::Identifier>,
         body: ast::BlockStatement,
         env: Environment,
-    ) -> Gc<Object> {
-        Gc::new(Object::Function(Function {
-            parameters,
-            body,
-            env,
-        }))
+    ) -> Rc<Object> {
+        Rc::new(Object::Function(
+            Function {
+                parameters,
+                body,
+                env: Rc::downgrade(&env.environment),
+            },
+            Vec::new(),
+        ))
     }
-    pub fn builtin_function(func: BuiltinFunction) -> Gc<Object> {
-        Gc::new(Object::BuiltinFunction(func))
+    pub fn builtin_function(func: BuiltinFunction) -> Rc<Object> {
+        Rc::new(Object::BuiltinFunction(func))
     }
 }
 
-#[derive(PartialEq, Clone, Trace, Finalize)]
+#[derive(Clone)]
 pub struct Function {
-    #[unsafe_ignore_trace]
     pub parameters: Vec<ast::Identifier>,
-    #[unsafe_ignore_trace]
     pub body: ast::BlockStatement,
-    pub env: Environment,
+    pub env: std::rc::Weak<RefCell<EnvironmentCore>>,
+}
+
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters == other.parameters
+            && self.body == other.body
+            && self.env.ptr_eq(&other.env)
+    }
 }
 
 impl std::fmt::Debug for Function {
@@ -79,10 +88,10 @@ impl std::fmt::Debug for Function {
     }
 }
 
-#[derive(Clone, Trace, Finalize)]
+#[derive(Clone)]
 pub struct BuiltinFunction {
     #[allow(clippy::type_complexity)]
-    pub func: fn(Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn>,
+    pub func: fn(Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn>,
 }
 
 impl PartialEq for BuiltinFunction {
@@ -101,37 +110,37 @@ impl std::fmt::Debug for BuiltinFunction {
 
 #[derive(Debug, PartialEq)]
 pub enum QuickReturn {
-    Return(Gc<Object>),
+    Return(Rc<Object>),
     Error(EvaluationError),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum EvaluationError {
     UnknownInfixOperator {
-        left: Box<Gc<Object>>,
-        right: Box<Gc<Object>>,
+        left: Box<Rc<Object>>,
+        right: Box<Rc<Object>>,
         operation: ast::InfixOperationKind,
     },
     UnknownPrefixOperator {
-        right: Box<Gc<Object>>,
+        right: Box<Rc<Object>>,
         operation: ast::PrefixOperationKind,
     },
     UnknownIdentifier(Rc<str>),
-    NonBooleanCondition(Gc<Object>),
-    CallNonFunction(Gc<Object>),
+    NonBooleanCondition(Rc<Object>),
+    CallNonFunction(Rc<Object>),
     WrongArgumentCount {
         function: Function,
         expected: usize,
         actual: usize,
     },
     BuiltinFunctionError(Rc<str>),
-    IndexNotSupported(Gc<Object>),
-    IndexingWithNonInteger(Gc<Object>),
-    InvalidHashKey(Gc<Object>),
-    NoMatchingCase(Gc<Object>),
+    IndexNotSupported(Rc<Object>),
+    IndexingWithNonInteger(Rc<Object>),
+    InvalidHashKey(Rc<Object>),
+    NoMatchingCase(Rc<Object>),
 }
 
-pub fn object_to_key(object: &Gc<Object>) -> Result<ast::HashKey, EvaluationError> {
+pub fn object_to_key(object: &Rc<Object>) -> Result<ast::HashKey, EvaluationError> {
     match object.as_ref() {
         Object::Integer(value) => Ok(ast::HashKey::Integer(*value)),
         Object::Boolean(value) => Ok(ast::HashKey::Boolean(*value)),

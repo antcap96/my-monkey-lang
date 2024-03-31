@@ -28,8 +28,8 @@ impl Compiler {
 mod tests {
     use crate::code;
     use monkey_lang_interpreter::lexer::Tokenizer;
-    use monkey_lang_interpreter::parser::Parser;
     use monkey_lang_interpreter::object::Object;
+    use monkey_lang_interpreter::parser::Parser;
     #[ignore]
     #[test]
     fn test_integer_arithmetic() {

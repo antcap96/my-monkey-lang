@@ -1,5 +1,6 @@
+use std::rc::Rc;
+
 use crate::object::{BuiltinFunction, EvaluationError, Object, QuickReturn};
-use gc::Gc;
 
 fn unexpected_number_of_arguments_error(expected: usize, got: usize) -> QuickReturn {
     QuickReturn::Error(EvaluationError::BuiltinFunctionError(
@@ -11,7 +12,7 @@ fn unexpected_number_of_arguments_error(expected: usize, got: usize) -> QuickRet
     ))
 }
 
-fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+fn builtin_first(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
@@ -28,7 +29,7 @@ fn builtin_first(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
 }
 
-fn builtin_last(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+fn builtin_last(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
@@ -45,7 +46,7 @@ fn builtin_last(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
 }
 
-fn builtin_len(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+fn builtin_len(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
@@ -62,7 +63,7 @@ fn builtin_len(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
 }
 
-fn builtin_push(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+fn builtin_push(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 2 {
         return Err(unexpected_number_of_arguments_error(2, args.len()));
     }
@@ -78,7 +79,7 @@ fn builtin_push(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
 }
 
-fn builtin_tail(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+fn builtin_tail(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
@@ -95,14 +96,14 @@ fn builtin_tail(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
     }
 }
 
-pub fn builtin_to_string(args: Vec<Gc<Object>>) -> Result<Gc<Object>, QuickReturn> {
+pub fn builtin_to_string(args: Vec<Rc<Object>>) -> Result<Rc<Object>, QuickReturn> {
     if args.len() != 1 {
         return Err(unexpected_number_of_arguments_error(1, args.len()));
     }
     Ok(Object::string(to_string(args[0].clone())))
 }
 
-fn to_string(obj: Gc<Object>) -> String {
+fn to_string(obj: Rc<Object>) -> String {
     match obj.as_ref() {
         Object::String(s) => s.clone(),
         Object::Integer(i) => i.to_string(),
@@ -134,7 +135,7 @@ fn to_string(obj: Gc<Object>) -> String {
             s.push('}');
             s
         }
-        Object::Function(_) => format!("<fn@{:x}>", obj.as_ref() as *const Object as usize),
+        Object::Function(_, _) => format!("<fn@{:x}>", obj.as_ref() as *const Object as usize),
         Object::BuiltinFunction(_) => {
             format!("<builtin-fn@{:x}>", obj.as_ref() as *const Object as usize)
         }

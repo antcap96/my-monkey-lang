@@ -1,15 +1,15 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use crate::environment::Environment;
-use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
-use gc::Gc;
 use crate::ast;
 use crate::ast::{Expression, Pattern};
+use crate::environment::Environment;
+use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
 
 pub fn eval_program(
     program: &ast::Program,
     environment: &mut Environment,
-) -> Result<Gc<Object>, EvaluationError> {
+) -> Result<Rc<Object>, EvaluationError> {
     let mut output = Object::null();
     for statement in &program.statements {
         let result = eval_statement(statement, environment);
@@ -26,7 +26,7 @@ pub fn eval_program(
 fn eval_statement(
     statement: &ast::Statement,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     match statement {
         ast::Statement::Expression(expression) => eval_expression(expression, environment),
         ast::Statement::Return(statement) => eval_return_statement(statement, environment),
@@ -37,7 +37,7 @@ fn eval_statement(
 fn eval_let_statement(
     statement: &ast::LetStatement,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
     environment.set(statement.identifier.name.clone(), value.clone());
     Ok(value)
@@ -46,7 +46,7 @@ fn eval_let_statement(
 fn eval_return_statement(
     statement: &ast::ReturnStatement,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     let value = eval_expression(&statement.value, environment)?;
     Err(QuickReturn::Return(value))
 }
@@ -54,7 +54,7 @@ fn eval_return_statement(
 fn eval_expression(
     expression: &Expression,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     match expression {
         Expression::IntegerLiteral(value) => Ok(Object::integer(*value)),
         Expression::BooleanLiteral(value) => Ok(Object::boolean(*value)),
@@ -127,7 +127,9 @@ fn eval_expression(
         } => {
             let function = eval_expression(function, environment)?;
             match function.as_ref() {
-                Object::Function(function) => eval_call_function(function, arguments, environment),
+                Object::Function(function, _) => {
+                    eval_call_function(function, arguments, environment)
+                }
                 Object::BuiltinFunction(function) => {
                     eval_call_builtin_function(function, arguments, environment)
                 }
@@ -176,7 +178,7 @@ fn eval_call_function(
     function: &crate::object::Function,
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     if function.parameters.len() != arguments.len() {
         let expected = function.parameters.len();
         return Err(QuickReturn::Error(EvaluationError::WrongArgumentCount {
@@ -186,14 +188,23 @@ fn eval_call_function(
         }));
     }
     let arguments = eval_expressions(arguments, environment)?;
-    apply_function(function, arguments).map_err(QuickReturn::Error)
+    let (return_value, new_environment) =
+        apply_function(function, arguments).map_err(QuickReturn::Error)?;
+    match return_value.as_ref() {
+        Object::Function(f, envs) => {
+            let mut kept_environments = envs.clone();
+            kept_environments.push(new_environment.clone());
+            return Ok(Rc::new(Object::Function(f.clone(), kept_environments)));
+        }
+        _ => return Ok(return_value),
+    }
 }
 
 fn eval_call_builtin_function(
     function: &crate::object::BuiltinFunction,
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     let arguments = eval_expressions(arguments, environment)?;
     (function.func)(arguments)
 }
@@ -201,7 +212,7 @@ fn eval_call_builtin_function(
 fn eval_expressions(
     arguments: &Vec<Expression>,
     environment: &mut Environment,
-) -> Result<Vec<Gc<Object>>, QuickReturn> {
+) -> Result<Vec<Rc<Object>>, QuickReturn> {
     let mut result = Vec::new();
     for argument in arguments {
         result.push(eval_expression(argument, environment)?);
@@ -211,18 +222,21 @@ fn eval_expressions(
 
 fn apply_function(
     function: &crate::object::Function,
-    arguments: Vec<Gc<Object>>,
-) -> Result<Gc<Object>, EvaluationError> {
-    let mut new_environment = Environment::new_enclosed(function.env.clone());
+    arguments: Vec<Rc<Object>>,
+) -> Result<(Rc<Object>, Environment), EvaluationError> {
+    let mut new_environment = Environment::new_enclosed(Environment {
+        environment: function
+            .env
+            .upgrade()
+            .expect("The function environment should always be kept alive"),
+    });
     for (parameter, argument) in function.parameters.iter().zip(arguments.iter()) {
         new_environment.set(parameter.name.clone(), argument.clone());
     }
     let result = eval_block_statement(&function.body, &mut new_environment);
-    // TODO: When the result is a function, new_environment need to be kept as well
-    // Maybe as a element of the Object enum.
     match result {
-        Ok(object) => Ok(object),
-        Err(QuickReturn::Return(value)) => Ok(value),
+        Ok(object) => Ok((object, new_environment)),
+        Err(QuickReturn::Return(value)) => Ok((value, new_environment)),
         Err(QuickReturn::Error(err)) => Err(err),
     }
 }
@@ -230,7 +244,7 @@ fn apply_function(
 fn eval_block_statement(
     block: &ast::BlockStatement,
     environment: &mut Environment,
-) -> Result<Gc<Object>, QuickReturn> {
+) -> Result<Rc<Object>, QuickReturn> {
     let mut result = Object::null();
     for statement in &block.statements {
         result = eval_statement(statement, environment)?;
@@ -240,8 +254,8 @@ fn eval_block_statement(
 
 fn eval_prefix_operation(
     kind: &ast::PrefixOperationKind,
-    right: Result<Gc<Object>, QuickReturn>,
-) -> Result<Gc<Object>, QuickReturn> {
+    right: Result<Rc<Object>, QuickReturn>,
+) -> Result<Rc<Object>, QuickReturn> {
     let right = right?;
     match (&kind, right.as_ref()) {
         (ast::PrefixOperationKind::Bang, Object::Boolean(value)) => Ok(Object::boolean(!value)),
@@ -255,9 +269,9 @@ fn eval_prefix_operation(
 
 fn eval_infix_operation(
     kind: &ast::InfixOperationKind,
-    left: Result<Gc<Object>, QuickReturn>,
-    right: Result<Gc<Object>, QuickReturn>,
-) -> Result<Gc<Object>, QuickReturn> {
+    left: Result<Rc<Object>, QuickReturn>,
+    right: Result<Rc<Object>, QuickReturn>,
+) -> Result<Rc<Object>, QuickReturn> {
     use ast::InfixOperationKind;
     let left = left?;
     let right = right?;
@@ -310,16 +324,16 @@ fn eval_infix_operation(
 }
 
 enum MatchResult {
-    Match(Vec<(ast::Identifier, Gc<Object>)>),
+    Match(Vec<(ast::Identifier, Rc<Object>)>),
     NoMatch,
 }
 
 trait PatternMatches {
-    fn matches(&self, object: &Gc<Object>) -> MatchResult;
+    fn matches(&self, object: &Rc<Object>) -> MatchResult;
 }
 
 impl PatternMatches for Pattern {
-    fn matches(&self, object: &Gc<Object>) -> MatchResult {
+    fn matches(&self, object: &Rc<Object>) -> MatchResult {
         match (self, object.as_ref()) {
             (Pattern::Identifier(ident), _) => {
                 MatchResult::Match(vec![(ident.clone(), object.clone())])
@@ -406,11 +420,13 @@ impl PatternMatches for Pattern {
 
 #[cfg(test)]
 mod tests {
-    use crate::object::{EvaluationError, Object};
+    use std::rc::Rc;
+
     use crate::lexer::Tokenizer;
+    use crate::object::{EvaluationError, Object};
     use crate::parser::Parser;
 
-    fn test_evaluation(inputs: Vec<(&str, Result<gc::Gc<Object>, EvaluationError>)>) {
+    fn test_evaluation(inputs: Vec<(&str, Result<Rc<Object>, EvaluationError>)>) {
         for (input, output) in inputs {
             let tokenizer = Tokenizer::new(input);
             let mut parser = Parser::new(tokenizer);
@@ -514,8 +530,9 @@ mod tests {
 
     #[test]
     fn test_closure() {
-        let inputs = vec![(
-            r#"
+        let inputs = vec![
+            (
+                r#"
             let fa = fn() {
                 let x = 5;
                 let fb = fn() {
@@ -525,10 +542,10 @@ mod tests {
             };
             let temp = fa();
             temp()"#,
-            Ok(Object::integer(5)),
-        ),
-        (
-            r#"
+                Ok(Object::integer(5)),
+            ),
+            (
+                r#"
             let fa = fn() {
                 let x = 5;
                 let fb = fn() {
@@ -539,10 +556,10 @@ mod tests {
             let temp = fa();
             let temp_ = temp();
             temp_()"#,
-            Ok(Object::integer(5)),
-        ),
-        (
-            r#"
+                Ok(Object::integer(5)),
+            ),
+            (
+                r#"
             let fa = fn() {
                 let is_even = fn(x) {
                     if x == 0 {
@@ -562,8 +579,9 @@ mod tests {
             };
             let temp = fa();
             temp(1);"#,
-            Ok(Object::boolean(false)),
-        )];
+                Ok(Object::boolean(false)),
+            ),
+        ];
 
         test_evaluation(inputs)
     }

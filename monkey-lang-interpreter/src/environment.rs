@@ -1,23 +1,23 @@
 use crate::object::Object;
-use gc::{Finalize, Gc, GcCell, Trace};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentCore {
-    store: HashMap<Rc<str>, Gc<Object>>,
+    store: HashMap<Rc<str>, Rc<Object>>,
     outer: Option<Environment>,
 }
 
-#[derive(Debug, PartialEq, Clone, Trace, Finalize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Environment {
-    environment: Gc<GcCell<EnvironmentCore>>,
+    pub environment: Rc<RefCell<EnvironmentCore>>,
 }
 
 impl Environment {
     pub fn new() -> Self {
         Environment {
-            environment: Gc::new(GcCell::new(EnvironmentCore {
+            environment: Rc::new(RefCell::new(EnvironmentCore {
                 store: HashMap::new(),
                 outer: None,
             })),
@@ -26,14 +26,14 @@ impl Environment {
 
     pub fn new_enclosed(outer: Environment) -> Environment {
         Environment {
-            environment: Gc::new(GcCell::new(EnvironmentCore {
+            environment: Rc::new(RefCell::new(EnvironmentCore {
                 store: HashMap::new(),
                 outer: Some(outer),
             })),
         }
     }
     //                              Result<crate::object::Object, crate::object::QuickReturn>
-    pub fn get(&self, key: &str) -> Option<Gc<Object>> {
+    pub fn get(&self, key: &str) -> Option<Rc<Object>> {
         let env = self.environment.borrow();
         env.store
             .get(key)
@@ -42,7 +42,7 @@ impl Environment {
             .or(crate::builtins::map_builtins(key).map(crate::object::Object::builtin_function))
     }
 
-    pub fn set(&mut self, key: Rc<str>, value: Gc<Object>) {
+    pub fn set(&mut self, key: Rc<str>, value: Rc<Object>) {
         self.environment.borrow_mut().store.insert(key, value);
     }
 }

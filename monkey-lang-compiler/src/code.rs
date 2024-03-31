@@ -6,7 +6,5 @@ pub enum OpCode {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_make() {
-        
-    }
+    fn test_make() {}
 }
