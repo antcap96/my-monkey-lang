@@ -3,16 +3,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct EnvironmentCore {
-    store: HashMap<Rc<str>, Rc<Object>>,
-    outer: Option<Environment>,
-}
-
-impl std::fmt::Debug for EnvironmentCore {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_set().entries(self.store.keys()).finish()
-    }
+    pub store: HashMap<Rc<str>, Rc<Object>>,
+    pub outer: Option<Environment>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -38,7 +32,7 @@ impl Environment {
             })),
         }
     }
-    //                              Result<crate::object::Object, crate::object::QuickReturn>
+
     pub fn get(&self, key: &str) -> Option<Rc<Object>> {
         let env = self.environment.borrow();
         env.store

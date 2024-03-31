@@ -135,7 +135,7 @@ fn to_string(obj: Rc<Object>) -> String {
             s.push('}');
             s
         }
-        Object::Function(_, _) => format!("<fn@{:x}>", obj.as_ref() as *const Object as usize),
+        Object::Function(_) => format!("<fn@{:x}>", obj.as_ref() as *const Object as usize),
         Object::BuiltinFunction(_) => {
             format!("<builtin-fn@{:x}>", obj.as_ref() as *const Object as usize)
         }

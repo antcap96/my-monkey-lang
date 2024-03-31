@@ -127,9 +127,7 @@ fn eval_expression(
         } => {
             let function = eval_expression(function, environment)?;
             match function.as_ref() {
-                Object::Function(function, _) => {
-                    eval_call_function(function, arguments, environment)
-                }
+                Object::Function(function) => eval_call_function(function, arguments, environment),
                 Object::BuiltinFunction(function) => {
                     eval_call_builtin_function(function, arguments, environment)
                 }
@@ -191,10 +189,17 @@ fn eval_call_function(
     let (return_value, new_environment) =
         apply_function(function, arguments).map_err(QuickReturn::Error)?;
     match return_value.as_ref() {
-        Object::Function(f, envs) => {
-            let mut kept_environments = envs.clone();
-            kept_environments.push(new_environment.clone());
-            return Ok(Rc::new(Object::Function(f.clone(), kept_environments)));
+        Object::Function(f) => {
+            // Ensure returned functions keep a strong reference to the
+            // environment used to evaluate them, so that captured variables are
+            // still available. Because environments keep a strong reference to
+            // its parent, this keeps all possible captured variables alive.
+            //
+            // When the functions goes out of scope, the environments can be
+            // removed
+            return Ok(Rc::new(Object::Function(
+                f.clone_with_captured_environment(new_environment),
+            )));
         }
         _ => return Ok(return_value),
     }
@@ -226,7 +231,7 @@ fn apply_function(
 ) -> Result<(Rc<Object>, Environment), EvaluationError> {
     let mut new_environment = Environment::new_enclosed(Environment {
         environment: function
-            .env
+            .parent_env
             .upgrade()
             .expect("The function environment should always be kept alive"),
     });
@@ -578,12 +583,48 @@ mod tests {
                 is_even
             };
             let temp = fa();
-            temp(1);"#,
+            temp(3);"#,
                 Ok(Object::boolean(false)),
             ),
         ];
 
         test_evaluation(inputs)
+    }
+
+    #[test]
+    fn test_unused_function_envs_are_dropped() {
+        let input = r#"
+        let fa = fn() {
+            let x = 5;
+            let fb = fn() {
+                x
+            };
+            fb
+        };
+        fa()"#;
+        let tokenizer = Tokenizer::new(input);
+        let mut parser = Parser::new(tokenizer);
+        let ast = parser.parse_program().unwrap();
+        let mut env = super::Environment::new();
+        let mut result = super::eval_program(&ast, &mut env).expect("No errors in execution");
+
+        // `fa` is the only variable in the environment
+        assert_eq!(env.environment.borrow().store.len(), 1);
+
+        match Rc::<Object>::get_mut(&mut result)
+            .expect("This should be the only reference to this object")
+        {
+            Object::Function(f) => {
+                // parent_env should be kept alive in captured_environments
+                assert!(f.parent_env.upgrade().is_some());
+                assert_eq!(f.captured_environments.len(), 1);
+                // We remove the captured environment causing parent_env to be
+                // dropped
+                f.captured_environments.clear();
+                assert!(f.parent_env.upgrade().is_none());
+            }
+            _ => panic!("The output should be a function"),
+        }
     }
 
     #[test]

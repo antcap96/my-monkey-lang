@@ -12,7 +12,7 @@ pub enum Object {
     String(String),
     Array(Vec<Rc<Object>>),
     Hash(HashMap<ast::HashKey, (Rc<Object>, Rc<Object>)>),
-    Function(Function, Vec<Environment>),
+    Function(Function),
     BuiltinFunction(BuiltinFunction),
     Null,
 }
@@ -55,9 +55,9 @@ impl Object {
             Function {
                 parameters,
                 body,
-                env: Rc::downgrade(&env.environment),
+                parent_env: Rc::downgrade(&env.environment),
+                captured_environments: Vec::new()
             },
-            Vec::new(),
         ))
     }
     pub fn builtin_function(func: BuiltinFunction) -> Rc<Object> {
@@ -69,14 +69,26 @@ impl Object {
 pub struct Function {
     pub parameters: Vec<ast::Identifier>,
     pub body: ast::BlockStatement,
-    pub env: std::rc::Weak<RefCell<EnvironmentCore>>,
+    pub parent_env: std::rc::Weak<RefCell<EnvironmentCore>>,
+    pub captured_environments: Vec<Environment>
+}
+
+impl Function {
+    pub fn clone_with_captured_environment(&self, env: Environment) -> Self {
+        let mut captured_environments = self.captured_environments.clone();
+        captured_environments.push(env);
+        Function {
+            captured_environments,
+            ..self.clone()
+        }
+    }
 }
 
 impl PartialEq for Function {
     fn eq(&self, other: &Self) -> bool {
         self.parameters == other.parameters
             && self.body == other.body
-            && self.env.ptr_eq(&other.env)
+            && self.parent_env.ptr_eq(&other.parent_env)
     }
 }
 
