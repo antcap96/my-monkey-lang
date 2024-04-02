@@ -19,7 +19,7 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, program: monkey_lang_interpreter::ast::Program) -> Bytecode {
+    pub fn compile(&mut self, program: monkey_lang_core::ast::Program) -> Bytecode {
         todo!()
     }
 }
@@ -27,9 +27,9 @@ impl Compiler {
 #[cfg(test)]
 mod tests {
     use crate::code;
-    use monkey_lang_interpreter::lexer::Tokenizer;
+    use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_interpreter::object::Object;
-    use monkey_lang_interpreter::parser::Parser;
+    use monkey_lang_core::parser::Parser;
     #[ignore]
     #[test]
     fn test_integer_arithmetic() {

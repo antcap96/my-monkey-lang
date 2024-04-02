@@ -205,18 +205,27 @@ checksum = "f665ee40bc4a3c5590afb1e9677db74a508659dfd71e126420da8274909a0167"
 name = "monkey-lang-compiler"
 version = "0.1.0"
 dependencies = [
+ "monkey-lang-core",
  "monkey-lang-interpreter",
 ]
 
 [[package]]
+name = "monkey-lang-core"
+version = "0.1.0"
+
+[[package]]
 name = "monkey-lang-interpreter"
 version = "0.1.0"
+dependencies = [
+ "monkey-lang-core",
+]
 
 [[package]]
 name = "monkey-lang-runner"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "monkey-lang-core",
  "monkey-lang-interpreter",
  "rustyline",
 ]

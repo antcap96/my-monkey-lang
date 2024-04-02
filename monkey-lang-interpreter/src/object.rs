@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast;
+use monkey_lang_core::ast;
 use crate::environment::{Environment, EnvironmentCore};
 
 #[derive(Debug, PartialEq, Clone)]

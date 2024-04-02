@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 monkey-lang-interpreter = {path = "../monkey-lang-interpreter"}
+monkey-lang-core = {path = "../monkey-lang-core"}
 clap = { version = "4.3.23", features = ["derive"] }
 rustyline = "12.0.0"

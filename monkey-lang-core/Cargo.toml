@@ -1,10 +1,8 @@
 [package]
-name = "monkey-lang-compiler"
+name = "monkey-lang-core"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-monkey-lang-interpreter = { path = "../monkey-lang-interpreter" }
-monkey-lang-core = { path = "../monkey-lang-core" }

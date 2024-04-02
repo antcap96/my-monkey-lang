@@ -2,6 +2,6 @@
 members = [
     "monkey-lang-interpreter",
     "monkey-lang-compiler",
-    "monkey-lang-runner",
+    "monkey-lang-runner", "monkey-lang-core",
 ]
 resolver = "2"
