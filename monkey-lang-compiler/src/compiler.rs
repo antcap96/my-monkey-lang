@@ -55,6 +55,11 @@ impl Compiler {
             Expression::InfixOperation(kind, left, right) => {
                 self.compile_expression(*left)?;
                 self.compile_expression(*right)?;
+                use monkey_lang_core::ast::InfixOperationKind as K;
+                match kind {
+                    K::Plus => self.emit(OpCode::OpAdd),
+                    _ => todo!(),
+                };
                 Ok(())
             }
             Expression::IntegerLiteral(literal) => {
@@ -90,7 +95,11 @@ mod tests {
     fn test_integer_arithmetic() {
         let input = "1 + 2";
         let expected_constants = vec![Object::Integer(1), Object::Integer(2)];
-        let expected_instructions = vec![code::OpCode::OpConstant(0), code::OpCode::OpConstant(1)];
+        let expected_instructions = vec![
+            code::OpCode::OpConstant(0),
+            code::OpCode::OpConstant(1),
+            code::OpCode::OpAdd,
+        ];
 
         let tokenizer = Tokenizer::new(input);
         let mut parser = Parser::new(tokenizer);

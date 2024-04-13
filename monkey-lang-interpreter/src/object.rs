@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use monkey_lang_core::ast;
 use crate::environment::{Environment, EnvironmentCore};
+use monkey_lang_core::ast;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
@@ -51,14 +51,12 @@ impl Object {
         body: ast::BlockStatement,
         env: Environment,
     ) -> Rc<Object> {
-        Rc::new(Object::Function(
-            Function {
-                parameters,
-                body,
-                parent_env: Rc::downgrade(&env.environment),
-                captured_environments: Vec::new()
-            },
-        ))
+        Rc::new(Object::Function(Function {
+            parameters,
+            body,
+            parent_env: Rc::downgrade(&env.environment),
+            captured_environments: Vec::new(),
+        }))
     }
     pub fn builtin_function(func: BuiltinFunction) -> Rc<Object> {
         Rc::new(Object::BuiltinFunction(func))
@@ -70,7 +68,7 @@ pub struct Function {
     pub parameters: Vec<ast::Identifier>,
     pub body: ast::BlockStatement,
     pub parent_env: std::rc::Weak<RefCell<EnvironmentCore>>,
-    pub captured_environments: Vec<Environment>
+    pub captured_environments: Vec<Environment>,
 }
 
 impl Function {

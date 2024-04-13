@@ -28,6 +28,17 @@ impl Vm {
                     let object = self.constants[*const_index as usize].clone();
                     self.stack.push(object);
                 }
+                OpCode::OpAdd => {
+                    let msg = "Not enough elements to execute Add";
+                    let right = self.stack.pop().expect(msg);
+                    let left = self.stack.pop().expect(msg);
+                    match (left, right) {
+                        (Object::Integer(l), Object::Integer(r)) => {
+                            self.stack.push(Object::Integer(l + r))
+                        }
+                        _ => todo!(),
+                    }
+                }
             }
         }
     }
@@ -46,7 +57,7 @@ mod tests {
         let inputs = [
             ("1", Object::Integer(1)),
             ("2", Object::Integer(2)),
-            ("1 + 2", Object::Integer(2)), // FIXME
+            ("1 + 2", Object::Integer(3)),
         ];
 
         for (input, output) in inputs {

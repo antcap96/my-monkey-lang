@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq)]
 pub enum OpCode {
     OpConstant(u16),
+    OpAdd,
 }
 
 #[cfg(test)]

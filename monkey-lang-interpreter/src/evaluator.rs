@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use monkey_lang_core::ast;
-use monkey_lang_core::ast::{Expression, Pattern};
 use crate::environment::Environment;
 use crate::object::{object_to_key, EvaluationError, Object, QuickReturn};
+use monkey_lang_core::ast;
+use monkey_lang_core::ast::{Expression, Pattern};
 
 pub fn eval_program(
     program: &ast::Program,
@@ -427,8 +427,8 @@ impl PatternMatches for Pattern {
 mod tests {
     use std::rc::Rc;
 
-    use monkey_lang_core::lexer::Tokenizer;
     use crate::object::{EvaluationError, Object};
+    use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_core::parser::Parser;
 
     fn test_evaluation(inputs: Vec<(&str, Result<Rc<Object>, EvaluationError>)>) {

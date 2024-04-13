@@ -225,6 +225,7 @@ name = "monkey-lang-runner"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "monkey-lang-compiler",
  "monkey-lang-core",
  "monkey-lang-interpreter",
  "rustyline",
