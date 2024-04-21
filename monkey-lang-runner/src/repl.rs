@@ -61,7 +61,7 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
                         let mut machine = vm::Vm::new(bytecode);
                         machine.run(); //TODO: should be able to fail
 
-                        println!("result: {:?}", machine.stack_top());
+                        println!("result: {:?}", machine.last_popped_stack_element);
                     }
                 }
             }

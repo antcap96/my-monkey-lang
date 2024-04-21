@@ -10,8 +10,8 @@ pub struct Compiler {
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            instructions: vec![],
-            constants: vec![],
+            instructions: Vec::new(),
+            constants: Vec::new(),
         }
     }
 
@@ -41,7 +41,10 @@ impl Compiler {
 
     pub fn compile_statement(&mut self, statement: Statement) -> Result<(), ()> {
         match statement {
-            Statement::Expression(expression) => self.compile_expression(expression)?,
+            Statement::Expression(expression) => {
+                self.compile_expression(expression)?;
+                self.emit(OpCode::Pop);
+            }
             Statement::Let(let_statement) => self.compile_let_statement(let_statement)?,
             Statement::Return(return_statement) => {
                 self.compile_return_statement(return_statement)?
@@ -57,18 +60,26 @@ impl Compiler {
                 self.compile_expression(*right)?;
                 use monkey_lang_core::ast::InfixOperationKind as K;
                 match kind {
-                    K::Plus => self.emit(OpCode::OpAdd),
+                    K::Plus => self.emit(OpCode::Add),
+                    K::Minus => self.emit(OpCode::Subtract),
+                    K::Multiply => self.emit(OpCode::Multiply),
+                    K::Divide => self.emit(OpCode::Divide),
                     _ => todo!(),
                 };
-                Ok(())
             }
             Expression::IntegerLiteral(literal) => {
                 let obj_id = self.add_constant(Object::Integer(literal));
-                self.add_instruction(OpCode::OpConstant(obj_id));
-                Ok(())
+                self.add_instruction(OpCode::Constant(obj_id));
             }
-            _ => Ok(()),
+            Expression::BooleanLiteral(true) => {
+                self.add_instruction(OpCode::True);
+            }
+            Expression::BooleanLiteral(false) => {
+                self.add_instruction(OpCode::False);
+            }
+            _ => {}
         }
+        Ok(())
     }
 
     pub fn compile_let_statement(&mut self, statement: LetStatement) -> Result<(), ()> {
@@ -87,27 +98,80 @@ pub struct Bytecode {
 
 #[cfg(test)]
 mod tests {
-    use crate::code;
+    use crate::code::OpCode;
     use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_core::parser::Parser;
     use monkey_lang_interpreter::object::Object;
-    #[test]
-    fn test_integer_arithmetic() {
-        let input = "1 + 2";
-        let expected_constants = vec![Object::Integer(1), Object::Integer(2)];
-        let expected_instructions = vec![
-            code::OpCode::OpConstant(0),
-            code::OpCode::OpConstant(1),
-            code::OpCode::OpAdd,
-        ];
 
+    fn validate_expression(input: &str, constants: Vec<Object>, instructions: Vec<OpCode>) {
         let tokenizer = Tokenizer::new(input);
         let mut parser = Parser::new(tokenizer);
         let program = parser.parse_program().unwrap();
 
         let bytecode = super::Compiler::new().compile(program).unwrap();
 
-        assert_eq!(bytecode.constants, expected_constants);
-        assert_eq!(bytecode.instructions, expected_instructions);
+        assert_eq!(bytecode.constants, constants);
+        assert_eq!(bytecode.instructions, instructions);
+    }
+    #[test]
+    fn test_integer_arithmetic() {
+        let tests = [
+            (
+                "1 + 2",
+                vec![Object::Integer(1), Object::Integer(2)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Add,
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "1 - 2",
+                vec![Object::Integer(1), Object::Integer(2)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Subtract,
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "1 * 2",
+                vec![Object::Integer(1), Object::Integer(2)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Multiply,
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "1 / 2",
+                vec![Object::Integer(1), Object::Integer(2)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Divide,
+                    OpCode::Pop,
+                ],
+            ),
+        ];
+
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_booleans() {
+        let tests = [
+            ("true", vec![], vec![OpCode::True, OpCode::Pop]),
+            ("false", vec![], vec![OpCode::False, OpCode::Pop]),
+        ];
+
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
     }
 }

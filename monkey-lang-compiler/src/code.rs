@@ -1,7 +1,13 @@
 #[derive(Debug, PartialEq)]
 pub enum OpCode {
-    OpConstant(u16),
-    OpAdd,
+    Constant(u16),
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    True,
+    False,
+    Pop,
 }
 
 #[cfg(test)]
