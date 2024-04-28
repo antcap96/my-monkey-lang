@@ -257,7 +257,7 @@ mod tests {
                 "!true",
                 vec![],
                 vec![OpCode::True, OpCode::Bang, OpCode::Pop],
-            )
+            ),
         ];
 
         for (input, constants, instructions) in tests {
