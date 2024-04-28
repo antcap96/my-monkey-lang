@@ -44,27 +44,30 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
         let program = parser::Parser::new(tokenizer).parse_program();
 
         match program {
-            Ok(program) => {
-                match mode {
-                    Mode::Interpreter => {
-                        let object = evaluator::eval_program(&program, &mut environment);
+            Ok(program) => match mode {
+                Mode::Interpreter => {
+                    let object = evaluator::eval_program(&program, &mut environment);
 
-                        println!("result: {:?}", object)
-                    }
-                    Mode::Compiler => {
-                        let comp = compiler::Compiler::new();
-                        let Ok(bytecode) = comp.compile(program) else {
-                            println!("Compilation failed");
-                            continue;
-                        };
+                    println!("result: {:?}", object)
+                }
+                Mode::Compiler => {
+                    let comp = compiler::Compiler::new();
+                    let compiled = comp.compile(program);
+                    let Ok(bytecode) = compiled else {
+                        println!("Compilation failed: {compiled:?}");
+                        continue;
+                    };
 
-                        let mut machine = vm::Vm::new(bytecode);
-                        machine.run(); //TODO: should be able to fail
+                    let mut machine = vm::Vm::new(bytecode);
 
+                    let res = machine.run();
+                    if res.is_ok() {
                         println!("result: {:?}", machine.last_popped_stack_element);
+                    } else {
+                        println!("{:?}", res)
                     }
                 }
-            }
+            },
             Err(errors) => {
                 println!("{:?}", errors);
             }

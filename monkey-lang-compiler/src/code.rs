@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum OpCode {
     Constant(u16),
     Add,
@@ -7,6 +7,11 @@ pub enum OpCode {
     Divide,
     True,
     False,
+    Equal,
+    NotEqual,
+    GreaterThan,
+    Minus,
+    Bang,
     Pop,
 }
 
