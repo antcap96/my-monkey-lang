@@ -62,7 +62,7 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
 
                     let res = machine.run();
                     if res.is_ok() {
-                        println!("result: {:?}", machine.last_popped_stack_element);
+                        println!("{:?}", machine.last_popped_stack_element);
                     } else {
                         println!("{:?}", res)
                     }
