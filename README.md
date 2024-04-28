@@ -6,6 +6,7 @@ This project is a Rust implementation of an interpreter for the Monkey programmi
 ## Getting Started
 
 To get started with the Monkey interpreter, follow these steps:
+
 ### Prerequisites
 
 * Rust: Make sure you have Rust installed on your system. You can download and install it from the official Rust website: https://www.rust-lang.org/.
