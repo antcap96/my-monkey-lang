@@ -4,6 +4,7 @@
         "Hashable",
         "peekable",
         "readline",
+        "repr",
         "rustyline"
     ]
 }
