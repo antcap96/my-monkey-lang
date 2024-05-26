@@ -13,6 +13,45 @@ pub enum OpCode {
     Minus,
     Bang,
     Pop,
+    Jump(u16),
+    JumpFalse(u16),
+}
+
+impl OpCode {
+    pub fn bytes(&self) -> Box<[u8]> {
+        match self {
+            OpCode::Constant(constant) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::Constant as u8);
+                out.extend_from_slice(&constant.to_be_bytes());
+                out.into()
+            }
+            OpCode::Add => [OpCodeId::Add as u8].into(),
+            OpCode::Subtract => [OpCodeId::Subtract as u8].into(),
+            OpCode::Multiply => [OpCodeId::Multiply as u8].into(),
+            OpCode::Divide => [OpCodeId::Divide as u8].into(),
+            OpCode::True => [OpCodeId::True as u8].into(),
+            OpCode::False => [OpCodeId::False as u8].into(),
+            OpCode::Equal => [OpCodeId::Equal as u8].into(),
+            OpCode::NotEqual => [OpCodeId::NotEqual as u8].into(),
+            OpCode::GreaterThan => [OpCodeId::GreaterThan as u8].into(),
+            OpCode::Minus => [OpCodeId::Minus as u8].into(),
+            OpCode::Bang => [OpCodeId::Bang as u8].into(),
+            OpCode::Pop => [OpCodeId::Pop as u8].into(),
+            OpCode::Jump(offset) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::Jump as u8);
+                out.extend_from_slice(&offset.to_be_bytes());
+                out.into()
+            }
+            OpCode::JumpFalse(offset) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::JumpFalse as u8);
+                out.extend_from_slice(&offset.to_be_bytes());
+                out.into()
+            }
+        }
+    }
 }
 
 #[repr(u8)]
@@ -30,6 +69,8 @@ pub enum OpCodeId {
     Minus,
     Bang,
     Pop,
+    Jump,
+    JumpFalse,
 }
 
 impl TryFrom<u8> for OpCodeId {
@@ -50,6 +91,8 @@ impl TryFrom<u8> for OpCodeId {
             x if x == OpCodeId::Minus as u8 => Ok(OpCodeId::Minus),
             x if x == OpCodeId::Bang as u8 => Ok(OpCodeId::Bang),
             x if x == OpCodeId::Pop as u8 => Ok(OpCodeId::Pop),
+            x if x == OpCodeId::Jump as u8 => Ok(OpCodeId::Jump),
+            x if x == OpCodeId::JumpFalse as u8 => Ok(OpCodeId::JumpFalse),
             _ => Err(()),
         }
     }
@@ -84,29 +127,22 @@ impl Instructions {
         self.bytes.extend(s.to_be_bytes());
     }
 
-    pub fn push(&mut self, op: OpCode) {
-        match op {
-            OpCode::Constant(constant) => {
-                self.write_u8(OpCodeId::Constant as u8);
-                self.write_u16(constant);
-            }
-            OpCode::Add => self.write_u8(OpCodeId::Add as u8),
-            OpCode::Subtract => self.write_u8(OpCodeId::Subtract as u8),
-            OpCode::Multiply => self.write_u8(OpCodeId::Multiply as u8),
-            OpCode::Divide => self.write_u8(OpCodeId::Divide as u8),
-            OpCode::True => self.write_u8(OpCodeId::True as u8),
-            OpCode::False => self.write_u8(OpCodeId::False as u8),
-            OpCode::Equal => self.write_u8(OpCodeId::Equal as u8),
-            OpCode::NotEqual => self.write_u8(OpCodeId::NotEqual as u8),
-            OpCode::GreaterThan => self.write_u8(OpCodeId::GreaterThan as u8),
-            OpCode::Minus => self.write_u8(OpCodeId::Minus as u8),
-            OpCode::Bang => self.write_u8(OpCodeId::Bang as u8),
-            OpCode::Pop => self.write_u8(OpCodeId::Pop as u8),
-        }
+    pub fn push(&mut self, op: &OpCode) {
+        self.bytes.extend_from_slice(&op.bytes());
     }
 
     pub fn len(&self) -> usize {
         self.bytes.len()
+    }
+
+    pub fn pop_to(&mut self, to: usize) {
+        self.bytes.truncate(to);
+    }
+
+    pub fn replace(&mut self, position: usize, new_instruction: OpCode) {
+        let to_replace = new_instruction.bytes();
+
+        self.bytes[position..][..to_replace.len()].copy_from_slice(&to_replace);
     }
 }
 
@@ -138,9 +174,9 @@ impl<'a> Iterator for InstructionsIter<'a> {
     type Item = Result<OpCode, InstructionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.offset >= self.instructions.bytes.len() {
-            return None;
-        }
+        // if self.offset >= self.instructions.bytes.len() {
+        //     return None;
+        // }
 
         let op = self.read_u8()?;
 
@@ -168,6 +204,20 @@ impl<'a> Iterator for InstructionsIter<'a> {
             OpCodeId::Minus => Some(Ok(OpCode::Minus)),
             OpCodeId::Bang => Some(Ok(OpCode::Bang)),
             OpCodeId::Pop => Some(Ok(OpCode::Pop)),
+            OpCodeId::Jump => {
+                let offset = self.read_u16();
+                match offset {
+                    Some(o) => Some(Ok(OpCode::Jump(o))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
+            OpCodeId::JumpFalse => {
+                let offset = self.read_u16();
+                match offset {
+                    Some(o) => Some(Ok(OpCode::JumpFalse(o))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
         }
     }
 }

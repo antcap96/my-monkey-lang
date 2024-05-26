@@ -123,6 +123,7 @@ impl Vm {
                     let popped = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.last_popped_stack_element = Some(popped);
                 }
+                _ => todo!(),
             }
         }
         Ok(())

@@ -1,5 +1,7 @@
 use crate::code::{Instructions, OpCode};
-use monkey_lang_core::ast::{Expression, LetStatement, Program, ReturnStatement, Statement};
+use monkey_lang_core::ast::{
+    BlockStatement, Expression, LetStatement, Program, ReturnStatement, Statement,
+};
 use monkey_lang_interpreter::object::Object;
 
 #[derive(Debug)]
@@ -8,9 +10,17 @@ pub enum CompilationError {
 }
 
 #[derive(Debug)]
+pub struct EmittedInstruction {
+    op: OpCode,
+    position: usize,
+}
+
+#[derive(Debug)]
 pub struct Compiler {
     instructions: Instructions,
     constants: Vec<Object>,
+    last_instruction: Option<EmittedInstruction>,
+    previous_instruction: Option<EmittedInstruction>,
 }
 
 impl Compiler {
@@ -18,6 +28,8 @@ impl Compiler {
         Compiler {
             instructions: Instructions::new(),
             constants: Vec::new(),
+            last_instruction: None,
+            previous_instruction: None,
         }
     }
 
@@ -27,12 +39,27 @@ impl Compiler {
     }
 
     pub fn emit(&mut self, op: OpCode) -> usize {
-        self.add_instruction(op)
+        let position = self.add_instruction(&op);
+
+        self.set_last_instruction(EmittedInstruction { op, position });
+
+        position
     }
 
-    pub fn add_instruction(&mut self, op: OpCode) -> usize {
+    fn set_last_instruction(&mut self, op: EmittedInstruction) {
+        self.previous_instruction = std::mem::replace(&mut self.last_instruction, Some(op));
+    }
+
+    fn remove_last_instruction(&mut self) {
+        // This will crash if there is no last instruction
+        self.instructions
+            .pop_to(self.last_instruction.as_ref().unwrap().position);
+    }
+
+    pub fn add_instruction(&mut self, op: &OpCode) -> usize {
+        let position = self.instructions.len();
         self.instructions.push(op);
-        self.instructions.len() - 1
+        position
     }
 
     pub fn compile(mut self, program: Program) -> Result<Bytecode, CompilationError> {
@@ -92,15 +119,53 @@ impl Compiler {
             }
             Expression::IntegerLiteral(literal) => {
                 let obj_id = self.add_constant(Object::Integer(literal));
-                self.add_instruction(OpCode::Constant(obj_id));
+                self.add_instruction(&OpCode::Constant(obj_id));
             }
             Expression::BooleanLiteral(true) => {
-                self.add_instruction(OpCode::True);
+                self.add_instruction(&OpCode::True);
             }
             Expression::BooleanLiteral(false) => {
-                self.add_instruction(OpCode::False);
+                self.add_instruction(&OpCode::False);
+            }
+            Expression::IfExpression {
+                condition,
+                consequence,
+                alternative,
+            } => {
+                self.compile_expression(*condition)?;
+                let first_jump_pos = self.emit(OpCode::JumpFalse(u16::MAX));
+                self.compile_block_statement(consequence)?;
+                if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
+                    self.remove_last_instruction();
+                }
+                let mut first_jump_to = self.instructions.len() as u16;
+
+                if let Some(alternative) = alternative {
+                    let second_jump_pos = self.emit(OpCode::Jump(u16::MAX));
+                    first_jump_to = self.instructions.len() as u16;
+                    self.compile_block_statement(alternative)?;
+                    if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
+                        self.remove_last_instruction();
+                    }
+                    self.instructions.replace(
+                        second_jump_pos,
+                        OpCode::Jump(self.instructions.len() as u16),
+                    );
+                }
+                self.instructions
+                    .replace(first_jump_pos, OpCode::JumpFalse(first_jump_to));
             }
             _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn compile_block_statement(
+        &mut self,
+        statements: BlockStatement,
+    ) -> Result<(), CompilationError> {
+        for statement in statements.statements {
+            self.compile_statement(statement)?;
         }
         Ok(())
     }
@@ -141,11 +206,14 @@ mod tests {
         let bytecode = super::Compiler::new().compile(program).unwrap();
 
         assert_eq!(bytecode.constants, constants);
-        assert!(bytecode
-            .instructions
-            .iter()
-            .map(|op| op.unwrap())
-            .eq(instructions.into_iter()));
+        assert_eq!(
+            bytecode
+                .instructions
+                .iter()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            instructions
+        );
     }
     #[test]
     fn test_integer_arithmetic() {
@@ -264,6 +332,45 @@ mod tests {
             ),
         ];
 
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let tests = [
+            (
+                "if (true) { 10 }; 3333;",
+                vec![Object::Integer(10), Object::Integer(3333)],
+                vec![
+                    OpCode::True,
+                    OpCode::JumpFalse(7),
+                    OpCode::Constant(0),
+                    OpCode::Pop,
+                    OpCode::Constant(1),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "if (true) { 10 } else { 20 }; 3333;",
+                vec![
+                    Object::Integer(10),
+                    Object::Integer(20),
+                    Object::Integer(3333),
+                ],
+                vec![
+                    OpCode::True,
+                    OpCode::JumpFalse(10),
+                    OpCode::Constant(0),
+                    OpCode::Jump(13),
+                    OpCode::Constant(1),
+                    OpCode::Pop,
+                    OpCode::Constant(2),
+                    OpCode::Pop,
+                ],
+            ),
+        ];
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }
