@@ -5,6 +5,7 @@
         "peekable",
         "readline",
         "repr",
-        "rustyline"
+        "rustyline",
+        "thiserror"
     ]
 }

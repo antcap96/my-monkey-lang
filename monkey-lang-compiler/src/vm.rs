@@ -1,15 +1,19 @@
 use monkey_lang_interpreter::object::Object;
+use thiserror::Error;
 
 use crate::{
     code::{InstructionReadError, Instructions, OpCode},
     compiler::Bytecode,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum VmError {
+    #[error("Empty stack when executing opcode: {0:?}")]
     EmptyStack(OpCode),
+    #[error("Invalid operation: {0:?} with operands: {1:?}")]
     InvalidOperation(OpCode, Vec<Object>),
-    InstructionReadError(InstructionReadError),
+    #[error("Error reading instruction")]
+    InstructionReadError(#[from] InstructionReadError),
 }
 
 pub struct Vm {
@@ -35,8 +39,9 @@ impl Vm {
 
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
-        for op in self.instructions.iter() {
-            let op = op.map_err(|e| VmError::InstructionReadError(e))?;
+        let mut iter = self.instructions.iter();
+        while let Some(op) = iter.next() {
+            let op = op?;
 
             match op {
                 OpCode::Constant(const_index) => {
@@ -123,7 +128,16 @@ impl Vm {
                     let popped = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.last_popped_stack_element = Some(popped);
                 }
-                _ => todo!(),
+                OpCode::Jump(offset) => {
+                    iter = self.instructions.iter_at(offset as usize);
+                }
+                OpCode::JumpFalse(offset) => {
+                    let condition = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                    if Object::Boolean(false) == condition {
+                        iter = self.instructions.iter_at(offset as usize);
+                    }
+                }
+                OpCode::Null => self.stack.push(Object::Null),
             }
         }
         Ok(())
@@ -146,7 +160,7 @@ mod tests {
         let bytecode = Compiler::new().compile(program).unwrap();
 
         let mut vm = Vm::new(bytecode);
-        vm.run().unwrap();
+        vm.run().expect("Error running VM");
 
         assert_eq!(vm.last_popped_stack_element, Some(output))
     }
@@ -202,6 +216,24 @@ mod tests {
             ("!false", Object::Boolean(true)),
             ("!!true", Object::Boolean(true)),
             ("!!false", Object::Boolean(false)),
+        ];
+
+        for (input, output) in inputs {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let inputs = [
+            ("if (true) { 10 }", Object::Integer(10)),
+            ("if (true) { 10 } else { 20 }", Object::Integer(10)),
+            ("if (false) { 10 } else { 20 } ", Object::Integer(20)),
+            ("if (1 < 2) { 10 }", Object::Integer(10)),
+            ("if (1 < 2) { 10 } else { 20 }", Object::Integer(10)),
+            ("if (1 > 2) { 10 } else { 20 }", Object::Integer(20)),
+            ("if (1 > 2) { 10 }", Object::Null),
+            ("if (false) { 10 }", Object::Null),
         ];
 
         for (input, output) in inputs {

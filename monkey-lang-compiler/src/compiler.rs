@@ -138,22 +138,24 @@ impl Compiler {
                 if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
                     self.remove_last_instruction();
                 }
-                let mut first_jump_to = self.instructions.len() as u16;
+                let second_jump_pos = self.emit(OpCode::Jump(u16::MAX));
+                self.instructions.replace(
+                    first_jump_pos,
+                    OpCode::JumpFalse(self.instructions.len() as u16),
+                );
 
                 if let Some(alternative) = alternative {
-                    let second_jump_pos = self.emit(OpCode::Jump(u16::MAX));
-                    first_jump_to = self.instructions.len() as u16;
                     self.compile_block_statement(alternative)?;
                     if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
                         self.remove_last_instruction();
                     }
-                    self.instructions.replace(
-                        second_jump_pos,
-                        OpCode::Jump(self.instructions.len() as u16),
-                    );
+                } else {
+                    self.emit(OpCode::Null);
                 }
-                self.instructions
-                    .replace(first_jump_pos, OpCode::JumpFalse(first_jump_to));
+                self.instructions.replace(
+                    second_jump_pos,
+                    OpCode::Jump(self.instructions.len() as u16),
+                );
             }
             _ => {}
         }
@@ -172,14 +174,14 @@ impl Compiler {
 
     pub fn compile_let_statement(
         &mut self,
-        statement: LetStatement,
+        _statement: LetStatement,
     ) -> Result<(), CompilationError> {
         Err(CompilationError::TODO)
     }
 
     pub fn compile_return_statement(
         &mut self,
-        statement: ReturnStatement,
+        _statement: ReturnStatement,
     ) -> Result<(), CompilationError> {
         Err(CompilationError::TODO)
     }
@@ -345,8 +347,10 @@ mod tests {
                 vec![Object::Integer(10), Object::Integer(3333)],
                 vec![
                     OpCode::True,
-                    OpCode::JumpFalse(7),
+                    OpCode::JumpFalse(10),
                     OpCode::Constant(0),
+                    OpCode::Jump(11),
+                    OpCode::Null,
                     OpCode::Pop,
                     OpCode::Constant(1),
                     OpCode::Pop,

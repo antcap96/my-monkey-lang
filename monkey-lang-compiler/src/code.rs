@@ -1,3 +1,6 @@
+use num_enum::TryFromPrimitive;
+use thiserror::Error;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum OpCode {
     Constant(u16),
@@ -15,6 +18,7 @@ pub enum OpCode {
     Pop,
     Jump(u16),
     JumpFalse(u16),
+    Null,
 }
 
 impl OpCode {
@@ -50,11 +54,13 @@ impl OpCode {
                 out.extend_from_slice(&offset.to_be_bytes());
                 out.into()
             }
+            OpCode::Null => [OpCodeId::Null as u8].into(),
         }
     }
 }
 
 #[repr(u8)]
+#[derive(Debug, PartialEq, TryFromPrimitive)]
 pub enum OpCodeId {
     Constant,
     Add,
@@ -71,31 +77,7 @@ pub enum OpCodeId {
     Pop,
     Jump,
     JumpFalse,
-}
-
-impl TryFrom<u8> for OpCodeId {
-    type Error = ();
-
-    fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            x if x == OpCodeId::Constant as u8 => Ok(OpCodeId::Constant),
-            x if x == OpCodeId::Add as u8 => Ok(OpCodeId::Add),
-            x if x == OpCodeId::Subtract as u8 => Ok(OpCodeId::Subtract),
-            x if x == OpCodeId::Multiply as u8 => Ok(OpCodeId::Multiply),
-            x if x == OpCodeId::Divide as u8 => Ok(OpCodeId::Divide),
-            x if x == OpCodeId::True as u8 => Ok(OpCodeId::True),
-            x if x == OpCodeId::False as u8 => Ok(OpCodeId::False),
-            x if x == OpCodeId::Equal as u8 => Ok(OpCodeId::Equal),
-            x if x == OpCodeId::NotEqual as u8 => Ok(OpCodeId::NotEqual),
-            x if x == OpCodeId::GreaterThan as u8 => Ok(OpCodeId::GreaterThan),
-            x if x == OpCodeId::Minus as u8 => Ok(OpCodeId::Minus),
-            x if x == OpCodeId::Bang as u8 => Ok(OpCodeId::Bang),
-            x if x == OpCodeId::Pop as u8 => Ok(OpCodeId::Pop),
-            x if x == OpCodeId::Jump as u8 => Ok(OpCodeId::Jump),
-            x if x == OpCodeId::JumpFalse as u8 => Ok(OpCodeId::JumpFalse),
-            _ => Err(()),
-        }
-    }
+    Null,
 }
 
 #[derive(Debug, PartialEq)]
@@ -117,14 +99,6 @@ impl Instructions {
 
     pub fn iter(&self) -> InstructionsIter {
         self.iter_at(0)
-    }
-
-    fn write_u8(&mut self, b: u8) {
-        self.bytes.push(b);
-    }
-
-    fn write_u16(&mut self, s: u16) {
-        self.bytes.extend(s.to_be_bytes());
     }
 
     pub fn push(&mut self, op: &OpCode) {
@@ -164,9 +138,11 @@ impl<'a> InstructionsIter<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum InstructionReadError {
+    #[error("Unexpected end of instructions")]
     UnexpectedEndOfInstructions,
+    #[error("Invalid opcode: {0}")]
     InvalidOpCode(u8),
 }
 
@@ -218,6 +194,7 @@ impl<'a> Iterator for InstructionsIter<'a> {
                     None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
                 }
             }
+            OpCodeId::Null => Some(Ok(OpCode::Null)),
         }
     }
 }
