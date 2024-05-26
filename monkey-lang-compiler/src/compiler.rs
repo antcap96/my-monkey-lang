@@ -1,4 +1,4 @@
-use crate::code::OpCode;
+use crate::code::{Instructions, OpCode};
 use monkey_lang_core::ast::{Expression, LetStatement, Program, ReturnStatement, Statement};
 use monkey_lang_interpreter::object::Object;
 
@@ -9,14 +9,14 @@ pub enum CompilationError {
 
 #[derive(Debug)]
 pub struct Compiler {
-    instructions: Vec<OpCode>,
+    instructions: Instructions,
     constants: Vec<Object>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            instructions: Vec::new(),
+            instructions: Instructions::new(),
             constants: Vec::new(),
         }
     }
@@ -122,7 +122,7 @@ impl Compiler {
 
 #[derive(Debug)]
 pub struct Bytecode {
-    pub instructions: Vec<OpCode>,
+    pub instructions: Instructions,
     pub constants: Vec<Object>,
 }
 
@@ -141,7 +141,11 @@ mod tests {
         let bytecode = super::Compiler::new().compile(program).unwrap();
 
         assert_eq!(bytecode.constants, constants);
-        assert_eq!(bytecode.instructions, instructions);
+        assert!(bytecode
+            .instructions
+            .iter()
+            .map(|op| op.unwrap())
+            .eq(instructions.into_iter()));
     }
     #[test]
     fn test_integer_arithmetic() {

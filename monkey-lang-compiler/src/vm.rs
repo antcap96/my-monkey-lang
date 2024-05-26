@@ -1,16 +1,20 @@
 use monkey_lang_interpreter::object::Object;
 
-use crate::{code::OpCode, compiler::Bytecode};
+use crate::{
+    code::{InstructionReadError, Instructions, OpCode},
+    compiler::Bytecode,
+};
 
 #[derive(Debug)]
 pub enum VmError {
     EmptyStack(OpCode),
     InvalidOperation(OpCode, Vec<Object>),
+    InstructionReadError(InstructionReadError),
 }
 
 pub struct Vm {
     constants: Vec<Object>,
-    instructions: Vec<OpCode>,
+    instructions: Instructions,
     stack: Vec<Object>,
     pub last_popped_stack_element: Option<Object>,
 }
@@ -31,10 +35,12 @@ impl Vm {
 
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
-        for op in &self.instructions {
+        for op in self.instructions.iter() {
+            let op = op.map_err(|e| VmError::InstructionReadError(e))?;
+
             match op {
                 OpCode::Constant(const_index) => {
-                    let object = self.constants[*const_index as usize].clone();
+                    let object = self.constants[const_index as usize].clone();
                     self.stack.push(object);
                 }
                 OpCode::True => self.stack.push(Object::Boolean(true)),
