@@ -242,6 +242,7 @@ name = "monkey-lang-interpreter"
 version = "0.1.0"
 dependencies = [
  "monkey-lang-core",
+ "thiserror",
 ]
 
 [[package]]
