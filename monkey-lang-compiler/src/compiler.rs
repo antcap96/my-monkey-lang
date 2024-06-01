@@ -8,10 +8,13 @@ use monkey_lang_core::ast::{
     BlockStatement, Expression, LetStatement, Program, ReturnStatement, Statement,
 };
 use monkey_lang_interpreter::object::Object;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CompilationError {
+    #[error("Unknown identifier: {0}")]
     UnknownIdentifier(Rc<str>),
+    #[error("TODO")]
     TODO,
 }
 

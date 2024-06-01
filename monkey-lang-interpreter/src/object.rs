@@ -5,6 +5,8 @@ use std::rc::Rc;
 use crate::environment::{Environment, EnvironmentCore};
 use monkey_lang_core::ast;
 
+use thiserror::Error;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Integer(i64),
@@ -124,29 +126,42 @@ pub enum QuickReturn {
     Error(EvaluationError),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum EvaluationError {
+    #[error("Unknown infix operator: {operation:?} on {left:?} and {right:?}")]
     UnknownInfixOperator {
         left: Box<Rc<Object>>,
         right: Box<Rc<Object>>,
         operation: ast::InfixOperationKind,
     },
+    #[error("Unknown prefix operator: {operation:?} on {right:?}")]
     UnknownPrefixOperator {
         right: Box<Rc<Object>>,
         operation: ast::PrefixOperationKind,
     },
+    #[error("Unknown identifier: {0}")]
     UnknownIdentifier(Rc<str>),
+    #[error("Non boolean used in condition: {0:?}")]
     NonBooleanCondition(Rc<Object>),
+    #[error("Called an object that is not a function: {0:?}")]
     CallNonFunction(Rc<Object>),
+    #[error(
+        "Wrong number of arguments for function {function:?}. Expected {expected}, got {actual}"
+    )]
     WrongArgumentCount {
         function: Function,
         expected: usize,
         actual: usize,
     },
+    #[error("Builtin function error: {0}")]
     BuiltinFunctionError(Rc<str>),
+    #[error("Index not supported for object: {0:?}")]
     IndexNotSupported(Rc<Object>),
+    #[error("Object {0:?} cannot be used as index")]
     IndexingWithNonInteger(Rc<Object>),
+    #[error("Object {0:?} cannot be used as hash key")]
     InvalidHashKey(Rc<Object>),
+    #[error("No matching case for object: {0:?}")]
     NoMatchingCase(Rc<Object>),
 }
 

@@ -1,5 +1,10 @@
+use std::error::Error;
+
 use monkey_lang_compiler::code::Instructions;
 use monkey_lang_compiler::compiler::Bytecode;
+use monkey_lang_compiler::symbol_table::SymbolTable;
+use monkey_lang_core::ast::Program;
+use monkey_lang_interpreter::object::Object;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
@@ -12,19 +17,80 @@ use monkey_lang_interpreter::evaluator;
 
 use crate::Mode;
 
+trait Evaluator {
+    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>>;
+}
+
+struct InterpreterEvaluator {
+    environment: environment::Environment,
+}
+
+impl InterpreterEvaluator {
+    fn new() -> Self {
+        Self {
+            environment: environment::Environment::new(),
+        }
+    }
+}
+
+impl Evaluator for InterpreterEvaluator {
+    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>> {
+        let object = evaluator::eval_program(&program, &mut self.environment);
+
+        object
+            .map(|obj| Some(obj.as_ref().clone()))
+            .map_err(|err| err.into())
+    }
+}
+
+struct CompilerEvaluator {
+    compiler: compiler::Compiler,
+    machine: vm::Vm,
+}
+
+impl CompilerEvaluator {
+    fn new() -> Self {
+        Self {
+            compiler: compiler::Compiler::new(),
+            machine: vm::Vm::new(Bytecode {
+                instructions: Instructions::new(),
+                constants: vec![],
+            }),
+        }
+    }
+}
+
+impl Evaluator for CompilerEvaluator {
+    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>> {
+        let constants = std::mem::replace(&mut self.compiler.constants, Vec::new());
+        let symbol_table = std::mem::replace(&mut self.compiler.symbol_table, SymbolTable::new());
+        self.compiler = compiler::Compiler::new_with_state(constants, symbol_table);
+        let compiled = self.compiler.compile(&program);
+
+        match compiled {
+            Ok(bytecode) => {
+                let globals = std::mem::replace(&mut self.machine.globals, Vec::new());
+                self.machine = vm::Vm::new_with_global_store(bytecode, globals);
+
+                let res = self.machine.run();
+                res.map(|_| self.machine.last_popped_stack_element.clone())
+                    .map_err(|err| err.into())
+            }
+            Err(errors) => Err(errors.into()),
+        }
+    }
+}
+
 const PROMPT: &str = ">> ";
 
 pub fn start(mode: Mode) -> Result<(), ReadlineError> {
-    let mut environment = environment::Environment::new();
-
     let mut rl = DefaultEditor::new()?;
     let mut content: String;
 
-    let mut compiler = compiler::Compiler::new();
-    let mut machine = vm::Vm::new(Bytecode {
-        instructions: Instructions::new(),
-        constants: vec![],
-    });
+    let mut evaluator: Box<dyn Evaluator> = match mode {
+        Mode::Interpreter => Box::new(InterpreterEvaluator::new()),
+        Mode::Compiler => Box::new(CompilerEvaluator::new()),
+    };
 
     loop {
         let readline = rl.readline(PROMPT);
@@ -49,35 +115,16 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
         }
 
         let tokenizer = lexer::Tokenizer::new(&content);
-        // tokenizer.clone().for_each(|token| println!("{:?}", token));
         let program = parser::Parser::new(tokenizer).parse_program();
 
         match program {
-            Ok(program) => match mode {
-                Mode::Interpreter => {
-                    let object = evaluator::eval_program(&program, &mut environment);
-
-                    println!("result: {:?}", object)
+            Ok(program) => match evaluator.evaluate(program) {
+                Ok(Some(obj)) => {
+                    println!("{:?}", obj);
                 }
-                Mode::Compiler => {
-                    compiler = compiler::Compiler::new_with_state(
-                        compiler.constants,
-                        compiler.symbol_table,
-                    );
-                    let compiled = compiler.compile(&program);
-                    let Ok(bytecode) = compiled else {
-                        println!("Compilation failed: {compiled:?}");
-                        continue;
-                    };
-
-                    machine = vm::Vm::new_with_global_store(bytecode, machine.globals);
-
-                    let res = machine.run();
-                    if res.is_ok() {
-                        println!("{:?}", machine.last_popped_stack_element);
-                    } else {
-                        println!("{:?}", res)
-                    }
+                Ok(None) => {}
+                Err(err) => {
+                    println!("{}", err);
                 }
             },
             Err(errors) => {
