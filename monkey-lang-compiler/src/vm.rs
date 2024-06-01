@@ -20,6 +20,7 @@ pub struct Vm {
     constants: Vec<Object>,
     instructions: Instructions,
     stack: Vec<Object>,
+    pub globals: Vec<Object>,
     pub last_popped_stack_element: Option<Object>,
 }
 
@@ -30,6 +31,17 @@ impl Vm {
             instructions: bytecode.instructions,
             stack: Vec::new(),
             last_popped_stack_element: None,
+            globals: Vec::new(),
+        }
+    }
+
+    pub fn new_with_global_store(bytecode: Bytecode, globals: Vec<Object>) -> Vm {
+        Vm {
+            constants: bytecode.constants,
+            instructions: bytecode.instructions,
+            stack: Vec::new(),
+            last_popped_stack_element: None,
+            globals,
         }
     }
 
@@ -138,6 +150,19 @@ impl Vm {
                     }
                 }
                 OpCode::Null => self.stack.push(Object::Null),
+                OpCode::SetGlobal(index) => {
+                    let object = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                    // TODO: what if globals is not populated enough?
+                    self.globals.insert(index as usize, object);
+                }
+                OpCode::GetGlobal(index) => {
+                    let object = self
+                        .globals
+                        .get(index as usize)
+                        .cloned()
+                        .ok_or(VmError::EmptyStack(op.clone()))?;
+                    self.stack.push(object);
+                }
             }
         }
         Ok(())
@@ -157,7 +182,7 @@ mod tests {
         let mut parser = Parser::new(tokenizer);
         let program = parser.parse_program().unwrap();
 
-        let bytecode = Compiler::new().compile(program).unwrap();
+        let bytecode = Compiler::new().compile(&program).unwrap();
 
         let mut vm = Vm::new(bytecode);
         vm.run().expect("Error running VM");
@@ -237,6 +262,22 @@ mod tests {
         ];
 
         for (input, output) in inputs {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_global_set_statement() {
+        let tests = [
+            ("let one = 1; one", Object::Integer(1)),
+            ("let one = 1; let two = 2; one + two", Object::Integer(3)),
+            (
+                "let one = 1; let two = one + one; one + two",
+                Object::Integer(3),
+            ),
+        ];
+
+        for (input, output) in tests {
             validate_expression(input, output)
         }
     }

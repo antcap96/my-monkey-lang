@@ -1,3 +1,5 @@
+use monkey_lang_compiler::code::Instructions;
+use monkey_lang_compiler::compiler::Bytecode;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
@@ -17,6 +19,13 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
 
     let mut rl = DefaultEditor::new()?;
     let mut content: String;
+
+    let mut compiler = compiler::Compiler::new();
+    let mut machine = vm::Vm::new(Bytecode {
+        instructions: Instructions::new(),
+        constants: vec![],
+    });
+
     loop {
         let readline = rl.readline(PROMPT);
 
@@ -51,14 +60,17 @@ pub fn start(mode: Mode) -> Result<(), ReadlineError> {
                     println!("result: {:?}", object)
                 }
                 Mode::Compiler => {
-                    let comp = compiler::Compiler::new();
-                    let compiled = comp.compile(program);
+                    compiler = compiler::Compiler::new_with_state(
+                        compiler.constants,
+                        compiler.symbol_table,
+                    );
+                    let compiled = compiler.compile(&program);
                     let Ok(bytecode) = compiled else {
                         println!("Compilation failed: {compiled:?}");
                         continue;
                     };
 
-                    let mut machine = vm::Vm::new(bytecode);
+                    machine = vm::Vm::new_with_global_store(bytecode, machine.globals);
 
                     let res = machine.run();
                     if res.is_ok() {

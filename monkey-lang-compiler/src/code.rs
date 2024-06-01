@@ -19,6 +19,8 @@ pub enum OpCode {
     Jump(u16),
     JumpFalse(u16),
     Null,
+    SetGlobal(u16),
+    GetGlobal(u16),
 }
 
 impl OpCode {
@@ -55,6 +57,18 @@ impl OpCode {
                 out.into()
             }
             OpCode::Null => [OpCodeId::Null as u8].into(),
+            OpCode::SetGlobal(index) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::SetGlobal as u8);
+                out.extend_from_slice(&index.to_be_bytes());
+                out.into()
+            }
+            OpCode::GetGlobal(index) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::GetGlobal as u8);
+                out.extend_from_slice(&index.to_be_bytes());
+                out.into()
+            }
         }
     }
 }
@@ -78,9 +92,11 @@ pub enum OpCodeId {
     Jump,
     JumpFalse,
     Null,
+    SetGlobal,
+    GetGlobal,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Instructions {
     pub bytes: Vec<u8>,
 }
@@ -195,6 +211,20 @@ impl<'a> Iterator for InstructionsIter<'a> {
                 }
             }
             OpCodeId::Null => Some(Ok(OpCode::Null)),
+            OpCodeId::SetGlobal => {
+                let index = self.read_u16();
+                match index {
+                    Some(i) => Some(Ok(OpCode::SetGlobal(i))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
+            OpCodeId::GetGlobal => {
+                let index = self.read_u16();
+                match index {
+                    Some(i) => Some(Ok(OpCode::GetGlobal(i))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
         }
     }
 }

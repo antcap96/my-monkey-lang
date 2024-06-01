@@ -1,4 +1,9 @@
-use crate::code::{Instructions, OpCode};
+use std::rc::Rc;
+
+use crate::{
+    code::{Instructions, OpCode},
+    symbol_table::{self, SymbolTable},
+};
 use monkey_lang_core::ast::{
     BlockStatement, Expression, LetStatement, Program, ReturnStatement, Statement,
 };
@@ -6,21 +11,23 @@ use monkey_lang_interpreter::object::Object;
 
 #[derive(Debug)]
 pub enum CompilationError {
+    UnknownIdentifier(Rc<str>),
     TODO,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EmittedInstruction {
     op: OpCode,
     position: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Compiler {
     instructions: Instructions,
-    constants: Vec<Object>,
+    pub constants: Vec<Object>,
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
+    pub symbol_table: SymbolTable,
 }
 
 impl Compiler {
@@ -30,6 +37,17 @@ impl Compiler {
             constants: Vec::new(),
             last_instruction: None,
             previous_instruction: None,
+            symbol_table: SymbolTable::new(),
+        }
+    }
+
+    pub fn new_with_state(constants: Vec<Object>, symbol_table: SymbolTable) -> Self {
+        Compiler {
+            instructions: Instructions::new(),
+            constants,
+            last_instruction: None,
+            previous_instruction: None,
+            symbol_table,
         }
     }
 
@@ -62,17 +80,17 @@ impl Compiler {
         position
     }
 
-    pub fn compile(mut self, program: Program) -> Result<Bytecode, CompilationError> {
-        for statement in program.statements {
+    pub fn compile(&mut self, program: &Program) -> Result<Bytecode, CompilationError> {
+        for statement in &program.statements {
             self.compile_statement(statement)?;
         }
         Ok(Bytecode {
-            constants: self.constants,
-            instructions: self.instructions,
+            constants: self.constants.clone(),
+            instructions: self.instructions.clone(),
         })
     }
 
-    pub fn compile_statement(&mut self, statement: Statement) -> Result<(), CompilationError> {
+    pub fn compile_statement(&mut self, statement: &Statement) -> Result<(), CompilationError> {
         match statement {
             Statement::Expression(expression) => {
                 self.compile_expression(expression)?;
@@ -86,17 +104,17 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn compile_expression(&mut self, expression: Expression) -> Result<(), CompilationError> {
+    pub fn compile_expression(&mut self, expression: &Expression) -> Result<(), CompilationError> {
         match expression {
             Expression::InfixOperation(kind, left, right) => {
                 use monkey_lang_core::ast::InfixOperationKind as K;
-                if kind == K::LessThan {
-                    self.compile_expression(*right)?;
-                    self.compile_expression(*left)?;
+                if kind == &K::LessThan {
+                    self.compile_expression(right)?;
+                    self.compile_expression(left)?;
                     self.emit(OpCode::GreaterThan);
                 } else {
-                    self.compile_expression(*left)?;
-                    self.compile_expression(*right)?;
+                    self.compile_expression(left)?;
+                    self.compile_expression(right)?;
                     match kind {
                         K::Plus => self.emit(OpCode::Add),
                         K::Minus => self.emit(OpCode::Subtract),
@@ -111,14 +129,14 @@ impl Compiler {
             }
             Expression::PrefixOperation(kind, expression) => {
                 use monkey_lang_core::ast::PrefixOperationKind as K;
-                self.compile_expression(*expression)?;
+                self.compile_expression(expression)?;
                 match kind {
                     K::Minus => self.emit(OpCode::Minus),
                     K::Bang => self.emit(OpCode::Bang),
                 };
             }
             Expression::IntegerLiteral(literal) => {
-                let obj_id = self.add_constant(Object::Integer(literal));
+                let obj_id = self.add_constant(Object::Integer(*literal));
                 self.add_instruction(&OpCode::Constant(obj_id));
             }
             Expression::BooleanLiteral(true) => {
@@ -132,7 +150,7 @@ impl Compiler {
                 consequence,
                 alternative,
             } => {
-                self.compile_expression(*condition)?;
+                self.compile_expression(condition)?;
                 let first_jump_pos = self.emit(OpCode::JumpFalse(u16::MAX));
                 self.compile_block_statement(consequence)?;
                 if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
@@ -157,16 +175,33 @@ impl Compiler {
                     OpCode::Jump(self.instructions.len() as u16),
                 );
             }
-            _ => {}
+            Expression::Identifier(identifier) => {
+                let symbol = self.symbol_table.resolve(&identifier.name);
+                let Some(symbol) = symbol else {
+                    return Err(CompilationError::UnknownIdentifier(identifier.name.clone()));
+                };
+                self.emit(OpCode::GetGlobal(symbol.index as u16));
+            }
+            Expression::StringLiteral(_) => todo!(),
+            Expression::NullLiteral => todo!(),
+            Expression::ArrayLiteral(_) => todo!(),
+            Expression::HashLiteral(_) => todo!(),
+            Expression::FunctionLiteral { parameters, body } => todo!(),
+            Expression::CallExpression {
+                function,
+                arguments,
+            } => todo!(),
+            Expression::IndexExpression { left, index } => todo!(),
+            Expression::MatchExpression { expression, cases } => todo!(),
         }
         Ok(())
     }
 
     pub fn compile_block_statement(
         &mut self,
-        statements: BlockStatement,
+        statements: &BlockStatement,
     ) -> Result<(), CompilationError> {
-        for statement in statements.statements {
+        for statement in &statements.statements {
             self.compile_statement(statement)?;
         }
         Ok(())
@@ -174,14 +209,18 @@ impl Compiler {
 
     pub fn compile_let_statement(
         &mut self,
-        _statement: LetStatement,
+        statement: &LetStatement,
     ) -> Result<(), CompilationError> {
-        Err(CompilationError::TODO)
+        self.compile_expression(&statement.value)?;
+        let symbol = self.symbol_table.define(statement.identifier.name.clone());
+        let index = symbol.index;
+        self.emit(OpCode::SetGlobal(index as u16));
+        Ok(())
     }
 
     pub fn compile_return_statement(
         &mut self,
-        _statement: ReturnStatement,
+        _statement: &ReturnStatement,
     ) -> Result<(), CompilationError> {
         Err(CompilationError::TODO)
     }
@@ -205,7 +244,7 @@ mod tests {
         let mut parser = Parser::new(tokenizer);
         let program = parser.parse_program().unwrap();
 
-        let bytecode = super::Compiler::new().compile(program).unwrap();
+        let bytecode = super::Compiler::new().compile(&program).unwrap();
 
         assert_eq!(bytecode.constants, constants);
         assert_eq!(
@@ -371,6 +410,54 @@ mod tests {
                     OpCode::Constant(1),
                     OpCode::Pop,
                     OpCode::Constant(2),
+                    OpCode::Pop,
+                ],
+            ),
+        ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_global_set_statement() {
+        let tests = [
+            (
+                "
+                let one = 1;
+                let two = 2;",
+                vec![Object::Integer(1), Object::Integer(2)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::Constant(1),
+                    OpCode::SetGlobal(1),
+                ],
+            ),
+            (
+                "
+                let one = 1;
+                one;",
+                vec![Object::Integer(1)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::GetGlobal(0),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "
+                let one = 1;
+                let two = one;
+                two;",
+                vec![Object::Integer(1)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::GetGlobal(0),
+                    OpCode::SetGlobal(1),
+                    OpCode::GetGlobal(1),
                     OpCode::Pop,
                 ],
             ),
