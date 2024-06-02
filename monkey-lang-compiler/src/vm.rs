@@ -65,11 +65,16 @@ impl Vm {
                 OpCode::Add => {
                     let right = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     let left = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
-                    match (&left, &right) {
+                    match (left, right) {
                         (Object::Integer(l), Object::Integer(r)) => {
                             self.stack.push(Object::Integer(l + r))
                         }
-                        _ => return Err(VmError::InvalidOperation(op.clone(), vec![left, right])),
+                        (Object::String(l), Object::String(r)) => {
+                            self.stack.push(Object::String(l + &r))
+                        }
+                        (left, right) => {
+                            return Err(VmError::InvalidOperation(op.clone(), vec![left, right]))
+                        }
                     }
                 }
                 OpCode::Subtract => {
@@ -277,6 +282,21 @@ mod tests {
             ),
         ];
 
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_string_expressions() {
+        let tests = [
+            (r#""monkey""#, Object::String("monkey".into())),
+            (r#""mon" + "key""#, Object::String("monkey".into())),
+            (
+                r#""mon" + "key" + "banana""#,
+                Object::String("monkeybanana".into()),
+            ),
+        ];
         for (input, output) in tests {
             validate_expression(input, output)
         }

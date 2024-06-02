@@ -142,6 +142,10 @@ impl Compiler {
                 let obj_id = self.add_constant(Object::Integer(*literal));
                 self.add_instruction(&OpCode::Constant(obj_id));
             }
+            Expression::StringLiteral(string) => {
+                let obj_id = self.add_constant(Object::String(string.clone()));
+                self.emit(OpCode::Constant(obj_id));
+            }
             Expression::BooleanLiteral(true) => {
                 self.add_instruction(&OpCode::True);
             }
@@ -185,7 +189,6 @@ impl Compiler {
                 };
                 self.emit(OpCode::GetGlobal(symbol.index as u16));
             }
-            Expression::StringLiteral(_) => todo!(),
             Expression::NullLiteral => todo!(),
             Expression::ArrayLiteral(_) => todo!(),
             Expression::HashLiteral(_) => todo!(),
@@ -461,6 +464,30 @@ mod tests {
                     OpCode::GetGlobal(0),
                     OpCode::SetGlobal(1),
                     OpCode::GetGlobal(1),
+                    OpCode::Pop,
+                ],
+            ),
+        ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_string() {
+        let tests = [
+            (
+                r#""string""#,
+                vec![Object::String("string".into())],
+                vec![OpCode::Constant(0), OpCode::Pop],
+            ),
+            (
+                r#""mon"+"key""#,
+                vec![Object::String("mon".into()), Object::String("key".into())],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Add,
                     OpCode::Pop,
                 ],
             ),
