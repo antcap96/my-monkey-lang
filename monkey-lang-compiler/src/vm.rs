@@ -187,8 +187,8 @@ impl Vm {
                     let mut output = HashMap::with_capacity(size as usize);
 
                     for _ in 0..size {
-                        let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                        let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         output.insert(
                             (&key)
                                 .try_into()
@@ -210,7 +210,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use monkey_lang_core::{lexer::Tokenizer, parser::Parser};
+    use monkey_lang_core::{ast::HashKey, lexer::Tokenizer, parser::Parser};
     use monkey_lang_interpreter::object::Object;
 
     use crate::compiler::Compiler;
@@ -354,6 +354,42 @@ mod tests {
                     Rc::new(Object::Integer(12)),
                     Rc::new(Object::Integer(11)),
                 ]),
+            ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_hash_literal() {
+        let tests = [
+            ("{}", Object::Hash(HashMap::new())),
+            (
+                "{1: 2, 2: 3}",
+                Object::Hash(HashMap::from([
+                    (
+                        HashKey::Integer(1),
+                        (Rc::new(Object::Integer(1)), Rc::new(Object::Integer(2))),
+                    ),
+                    (
+                        HashKey::Integer(2),
+                        (Rc::new(Object::Integer(2)), Rc::new(Object::Integer(3))),
+                    ),
+                ])),
+            ),
+            (
+                "{1 + 1: 2 * 2, 3 + 3: 4 * 4}",
+                Object::Hash(HashMap::from([
+                    (
+                        HashKey::Integer(2),
+                        (Rc::new(Object::Integer(2)), Rc::new(Object::Integer(4))),
+                    ),
+                    (
+                        HashKey::Integer(6),
+                        (Rc::new(Object::Integer(6)), Rc::new(Object::Integer(16))),
+                    ),
+                ])),
             ),
         ];
         for (input, output) in tests {
