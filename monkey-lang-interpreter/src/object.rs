@@ -65,6 +65,19 @@ impl Object {
     }
 }
 
+impl TryFrom<&Object> for ast::HashKey {
+    type Error = ();
+
+    fn try_from(value: &Object) -> Result<Self, Self::Error> {
+        match value {
+            Object::Integer(int) => Ok(ast::HashKey::Integer(*int)),
+            Object::String(str) => Ok(ast::HashKey::String(str.clone())),
+            Object::Boolean(bool) => Ok(ast::HashKey::Boolean(*bool)),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Function {
     pub parameters: Vec<ast::Identifier>,

@@ -1,3 +1,6 @@
+use std::{collections::HashMap, rc::Rc};
+
+use monkey_lang_core::ast;
 use monkey_lang_interpreter::object::Object;
 use thiserror::Error;
 
@@ -14,6 +17,8 @@ pub enum VmError {
     InvalidOperation(OpCode, Vec<Object>),
     #[error("Error reading instruction")]
     InstructionReadError(#[from] InstructionReadError),
+    #[error("Invalid HashKey {0:?}. Only Integer, String and Boolean are valid keys")]
+    InvalidHashKey(Object),
 }
 
 pub struct Vm {
@@ -168,6 +173,32 @@ impl Vm {
                         .ok_or(VmError::EmptyStack(op.clone()))?;
                     self.stack.push(object);
                 }
+                OpCode::Array(size) => {
+                    let mut output = Vec::with_capacity(size as usize);
+
+                    for _ in 0..size {
+                        let top = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                        output.push(Rc::new(top)); // TODO: I don't think the array needs elements to be Rc'd
+                    }
+                    output.reverse();
+
+                    self.stack.push(Object::Array(output))
+                }
+                OpCode::Hash(size) => {
+                    let mut output = HashMap::with_capacity(size as usize);
+
+                    for _ in 0..size {
+                        let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                        let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                        output.insert(
+                            ast::HashKey::try_from(&key)
+                                .map_err(|_| VmError::InvalidHashKey(key.clone()))?,
+                            (Rc::new(key), Rc::new(value)),
+                        ); // TODO: I don't think the hash needs elements to be Rc'd
+                    }
+
+                    self.stack.push(Object::Hash(output))
+                }
             }
         }
         Ok(())
@@ -176,6 +207,8 @@ impl Vm {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
     use monkey_lang_core::{lexer::Tokenizer, parser::Parser};
     use monkey_lang_interpreter::object::Object;
@@ -295,6 +328,32 @@ mod tests {
             (
                 r#""mon" + "key" + "banana""#,
                 Object::String("monkeybanana".into()),
+            ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_array_literal() {
+        let tests = [
+            ("[]", Object::Array(Vec::new())),
+            (
+                "[1, 2, 3]",
+                Object::Array(vec![
+                    Rc::new(Object::Integer(1)),
+                    Rc::new(Object::Integer(2)),
+                    Rc::new(Object::Integer(3)),
+                ]),
+            ),
+            (
+                "[1 + 2, 3 * 4, 5 + 6]",
+                Object::Array(vec![
+                    Rc::new(Object::Integer(3)),
+                    Rc::new(Object::Integer(12)),
+                    Rc::new(Object::Integer(11)),
+                ]),
             ),
         ];
         for (input, output) in tests {

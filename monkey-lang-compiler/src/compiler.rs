@@ -152,6 +152,21 @@ impl Compiler {
             Expression::BooleanLiteral(false) => {
                 self.add_instruction(&OpCode::False);
             }
+            Expression::ArrayLiteral(array) => {
+                for element in array {
+                    self.compile_expression(element)?;
+                }
+                self.emit(OpCode::Array(array.len() as u16));
+            }
+            Expression::HashLiteral(hash) => {
+                let mut ordered_hash = hash.clone();
+                ordered_hash.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
+                for element in hash {
+                    self.compile_expression(&element.0)?;
+                    self.compile_expression(&element.1)?;
+                }
+                self.emit(OpCode::Hash(hash.len() as u16));
+            }
             Expression::IfExpression {
                 condition,
                 consequence,
@@ -190,8 +205,6 @@ impl Compiler {
                 self.emit(OpCode::GetGlobal(symbol.index as u16));
             }
             Expression::NullLiteral => todo!(),
-            Expression::ArrayLiteral(_) => todo!(),
-            Expression::HashLiteral(_) => todo!(),
             Expression::FunctionLiteral { parameters, body } => todo!(),
             Expression::CallExpression {
                 function,
@@ -492,6 +505,106 @@ mod tests {
                 ],
             ),
         ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_array_literal() {
+        let tests = [
+            ("[]", vec![], vec![(OpCode::Array(0)), (OpCode::Pop)]),
+            (
+                "[1, 2, 3]",
+                vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Constant(2),
+                    OpCode::Array(3),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "[1 + 2, 3 - 4, 5 * 6]",
+                vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
+                    Object::Integer(4),
+                    Object::Integer(5),
+                    Object::Integer(6),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Add,
+                    OpCode::Constant(2),
+                    OpCode::Constant(3),
+                    OpCode::Subtract,
+                    OpCode::Constant(4),
+                    OpCode::Constant(5),
+                    OpCode::Multiply,
+                    OpCode::Array(3),
+                    OpCode::Pop,
+                ],
+            ),
+        ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_hash_literal() {
+        let tests = [
+            ("{}", vec![], vec![OpCode::Hash(0), OpCode::Pop]),
+            (
+                "{1: 2, 3: 4, 5: 6}",
+                vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
+                    Object::Integer(4),
+                    Object::Integer(5),
+                    Object::Integer(6),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Constant(2),
+                    OpCode::Constant(3),
+                    OpCode::Constant(4),
+                    OpCode::Constant(5),
+                    OpCode::Hash(3),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "{1: 2 + 3, 4: 5 * 6}",
+                vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
+                    Object::Integer(4),
+                    Object::Integer(5),
+                    Object::Integer(6),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Constant(2),
+                    OpCode::Add,
+                    OpCode::Constant(3),
+                    OpCode::Constant(4),
+                    OpCode::Constant(5),
+                    OpCode::Multiply,
+                    OpCode::Hash(2),
+                    OpCode::Pop,
+                ],
+            ),
+        ];
+
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }

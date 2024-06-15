@@ -21,6 +21,8 @@ pub enum OpCode {
     Null,
     SetGlobal(u16),
     GetGlobal(u16),
+    Array(u16),
+    Hash(u16),
 }
 
 impl OpCode {
@@ -69,6 +71,18 @@ impl OpCode {
                 out.extend_from_slice(&index.to_be_bytes());
                 out.into()
             }
+            OpCode::Array(size) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::Array as u8);
+                out.extend_from_slice(&size.to_be_bytes());
+                out.into()
+            }
+            OpCode::Hash(size) => {
+                let mut out = Vec::with_capacity(3);
+                out.push(OpCodeId::Hash as u8);
+                out.extend_from_slice(&size.to_be_bytes());
+                out.into()
+            }
         }
     }
 }
@@ -94,6 +108,8 @@ pub enum OpCodeId {
     Null,
     SetGlobal,
     GetGlobal,
+    Array,
+    Hash,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -222,6 +238,20 @@ impl<'a> Iterator for InstructionsIter<'a> {
                 let index = self.read_u16();
                 match index {
                     Some(i) => Some(Ok(OpCode::GetGlobal(i))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
+            OpCodeId::Array => {
+                let size = self.read_u16();
+                match size {
+                    Some(s) => Some(Ok(OpCode::Array(s))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
+            OpCodeId::Hash => {
+                let size = self.read_u16();
+                match size {
+                    Some(s) => Some(Ok(OpCode::Hash(s))),
                     None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
                 }
             }
