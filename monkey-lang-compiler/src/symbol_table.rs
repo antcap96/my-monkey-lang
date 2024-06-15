@@ -34,11 +34,17 @@ impl SymbolTable {
         };
         self.store.insert(name.clone(), symbol);
         self.num_definitions += 1;
-        &self.store.get(&name).unwrap()
+        self.store.get(&name).unwrap()
     }
 
     pub fn resolve(&self, name: &str) -> Option<&Symbol> {
         self.store.get(name)
+    }
+}
+
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -62,14 +62,14 @@ impl CompilerEvaluator {
 
 impl Evaluator for CompilerEvaluator {
     fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>> {
-        let constants = std::mem::replace(&mut self.compiler.constants, Vec::new());
+        let constants = std::mem::take(&mut self.compiler.constants);
         let symbol_table = std::mem::replace(&mut self.compiler.symbol_table, SymbolTable::new());
         self.compiler = compiler::Compiler::new_with_state(constants, symbol_table);
         let compiled = self.compiler.compile(&program);
 
         match compiled {
             Ok(bytecode) => {
-                let globals = std::mem::replace(&mut self.machine.globals, Vec::new());
+                let globals = std::mem::take(&mut self.machine.globals);
                 self.machine = vm::Vm::new_with_global_store(bytecode, globals);
 
                 let res = self.machine.run();

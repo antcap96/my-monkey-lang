@@ -1,6 +1,5 @@
 use std::{collections::HashMap, rc::Rc};
 
-use monkey_lang_core::ast;
 use monkey_lang_interpreter::object::Object;
 use thiserror::Error;
 
@@ -191,7 +190,8 @@ impl Vm {
                         let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         output.insert(
-                            ast::HashKey::try_from(&key)
+                            (&key)
+                                .try_into()
                                 .map_err(|_| VmError::InvalidHashKey(key.clone()))?,
                             (Rc::new(key), Rc::new(value)),
                         ); // TODO: I don't think the hash needs elements to be Rc'd

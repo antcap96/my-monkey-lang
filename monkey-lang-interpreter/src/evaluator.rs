@@ -197,11 +197,11 @@ fn eval_call_function(
             //
             // When the functions goes out of scope, the environments can be
             // removed
-            return Ok(Rc::new(Object::Function(
+            Ok(Rc::new(Object::Function(
                 f.clone_with_captured_environment(new_environment),
-            )));
+            )))
         }
-        _ => return Ok(return_value),
+        _ => Ok(return_value),
     }
 }
 

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     code::{Instructions, OpCode},
-    symbol_table::{self, SymbolTable},
+    symbol_table::SymbolTable,
 };
 use monkey_lang_core::ast::{
     BlockStatement, Expression, LetStatement, Program, ReturnStatement, Statement,
@@ -56,7 +56,7 @@ impl Compiler {
 
     pub fn add_constant(&mut self, constant: Object) -> u16 {
         self.constants.push(constant);
-        return self.constants.len() as u16 - 1;
+        self.constants.len() as u16 - 1
     }
 
     pub fn emit(&mut self, op: OpCode) -> usize {
@@ -159,8 +159,6 @@ impl Compiler {
                 self.emit(OpCode::Array(array.len() as u16));
             }
             Expression::HashLiteral(hash) => {
-                let mut ordered_hash = hash.clone();
-                ordered_hash.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
                 for element in hash {
                     self.compile_expression(&element.0)?;
                     self.compile_expression(&element.1)?;
@@ -242,6 +240,12 @@ impl Compiler {
         _statement: &ReturnStatement,
     ) -> Result<(), CompilationError> {
         Err(CompilationError::TODO)
+    }
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

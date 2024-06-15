@@ -152,6 +152,12 @@ impl Instructions {
     }
 }
 
+impl Default for Instructions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct InstructionsIter<'a> {
     instructions: &'a Instructions,
     offset: usize,
