@@ -202,13 +202,18 @@ impl Compiler {
                 };
                 self.emit(OpCode::GetGlobal(symbol.index as u16));
             }
+            Expression::IndexExpression { left, index } => {
+                self.compile_expression(&left)?;
+                self.compile_expression(&index)?;
+
+                self.emit(OpCode::Index);
+            }
             Expression::NullLiteral => todo!(),
             Expression::FunctionLiteral { parameters, body } => todo!(),
             Expression::CallExpression {
                 function,
                 arguments,
             } => todo!(),
-            Expression::IndexExpression { left, index } => todo!(),
             Expression::MatchExpression { expression, cases } => todo!(),
         }
         Ok(())
@@ -609,6 +614,55 @@ mod tests {
             ),
         ];
 
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        let tests = [
+            (
+                "[1, 2, 3][1 + 1]",
+                vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
+                    Object::Integer(1),
+                    Object::Integer(1),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Constant(2),
+                    OpCode::Array(3),
+                    OpCode::Constant(3),
+                    OpCode::Constant(4),
+                    OpCode::Add,
+                    OpCode::Index,
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "{1: 2}[2 - 1]",
+                vec![
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(2),
+                    Object::Integer(1),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::Constant(1),
+                    OpCode::Hash(1),
+                    OpCode::Constant(2),
+                    OpCode::Constant(3),
+                    OpCode::Subtract,
+                    OpCode::Index,
+                    OpCode::Pop,
+                ],
+            ),
+        ];
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }

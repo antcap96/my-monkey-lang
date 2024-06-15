@@ -23,6 +23,7 @@ pub enum OpCode {
     GetGlobal(u16),
     Array(u16),
     Hash(u16),
+    Index,
 }
 
 impl OpCode {
@@ -83,6 +84,7 @@ impl OpCode {
                 out.extend_from_slice(&size.to_be_bytes());
                 out.into()
             }
+            OpCode::Index => [OpCodeId::Index as u8].into(),
         }
     }
 }
@@ -110,6 +112,7 @@ pub enum OpCodeId {
     GetGlobal,
     Array,
     Hash,
+    Index,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -261,6 +264,7 @@ impl<'a> Iterator for InstructionsIter<'a> {
                     None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
                 }
             }
+            OpCodeId::Index => Some(Ok(OpCode::Index)),
         }
     }
 }

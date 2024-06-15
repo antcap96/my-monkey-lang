@@ -1,5 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
+use monkey_lang_core::ast::HashKey;
 use monkey_lang_interpreter::object::Object;
 use thiserror::Error;
 
@@ -187,6 +188,8 @@ impl Vm {
                     let mut output = HashMap::with_capacity(size as usize);
 
                     for _ in 0..size {
+                        // NOTE: could have used Vec::drain to avoid repeatedly updating
+                        // the size of the Vec.
                         let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         output.insert(
@@ -198,6 +201,34 @@ impl Vm {
                     }
 
                     self.stack.push(Object::Hash(output))
+                }
+                OpCode::Index => {
+                    let index = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                    let left = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+
+                    match (&left, &index) {
+                        (Object::Array(arr), Object::Integer(i)) => self.stack.push(
+                            arr.get(*i as usize)
+                                .map(|o| o.as_ref().clone())
+                                .unwrap_or(Object::Null),
+                        ),
+                        (Object::Hash(hash), index) => {
+                            let key: HashKey = index
+                                .try_into()
+                                .map_err(|_| VmError::InvalidHashKey(index.clone()))?;
+                            self.stack.push(
+                                hash.get(&key)
+                                    .map(|(_, value)| value.as_ref().clone())
+                                    .unwrap_or(Object::Null),
+                            )
+                        }
+                        _ => {
+                            return Err(VmError::InvalidOperation(
+                                OpCode::Index,
+                                vec![left.clone(), index.clone()],
+                            ))
+                        }
+                    }
                 }
             }
         }
@@ -391,6 +422,25 @@ mod tests {
                     ),
                 ])),
             ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        let tests = [
+            ("[1, 2, 3][1]", Object::Integer(2)),
+            ("[1, 2, 3][0 + 2]", Object::Integer(3)),
+            ("[[1, 1, 1]][0][0]", Object::Integer(1)),
+            ("[][0]", Object::Null),
+            ("[1, 2, 3][99]", Object::Null),
+            ("[1][-1]", Object::Null),
+            ("{1: 1, 2: 2}[1]", Object::Integer(1)),
+            ("{1: 1, 2: 2}[2]", Object::Integer(2)),
+            ("{1: 1}[0]", Object::Null),
+            ("{}[0]", Object::Null),
         ];
         for (input, output) in tests {
             validate_expression(input, output)
