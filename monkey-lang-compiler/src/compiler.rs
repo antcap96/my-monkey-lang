@@ -140,18 +140,21 @@ impl Compiler {
             }
             Expression::IntegerLiteral(literal) => {
                 let obj_id = self.add_constant(Object::Integer(*literal));
-                self.add_instruction(&OpCode::Constant(obj_id));
+                self.emit(OpCode::Constant(obj_id));
             }
             Expression::StringLiteral(string) => {
                 let obj_id = self.add_constant(Object::String(string.clone()));
                 self.emit(OpCode::Constant(obj_id));
             }
             Expression::BooleanLiteral(true) => {
-                self.add_instruction(&OpCode::True);
+                self.emit(OpCode::True);
             }
             Expression::BooleanLiteral(false) => {
-                self.add_instruction(&OpCode::False);
+                self.emit(OpCode::False);
             }
+            Expression::NullLiteral => {
+                self.emit(OpCode::Null);
+            },
             Expression::ArrayLiteral(array) => {
                 for element in array {
                     self.compile_expression(element)?;
@@ -208,7 +211,6 @@ impl Compiler {
 
                 self.emit(OpCode::Index);
             }
-            Expression::NullLiteral => todo!(),
             Expression::FunctionLiteral { parameters, body } => todo!(),
             Expression::CallExpression {
                 function,
