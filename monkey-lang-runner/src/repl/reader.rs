@@ -1,7 +1,6 @@
 use monkey_lang_core::ast::Program;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
-use std::ops::ControlFlow;
 
 use monkey_lang_core::lexer;
 use monkey_lang_core::parser;
@@ -10,7 +9,8 @@ use rustyline::Editor;
 const PROMPT: &str = ">> ";
 
 pub enum ReadOutput {
-    ControlFlow(ControlFlow<(), ()>),
+    Exit,
+    Clear,
     Value(Program),
 }
 
@@ -28,15 +28,15 @@ impl Reader {
         let line = match readline {
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                return ReadOutput::ControlFlow(ControlFlow::Continue(())); // Clear line
+                return ReadOutput::Clear; // Clear line
             }
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                return ReadOutput::ControlFlow(ControlFlow::Break(()));
+                return ReadOutput::Exit;
             }
             Err(err) => {
                 println!("Error: {:?}", err);
-                return ReadOutput::ControlFlow(ControlFlow::Break(()));
+                return ReadOutput::Exit;
             }
             Ok(line) => {
                 self.rl.add_history_entry(&line).unwrap(); // TODO: why can this fail?
@@ -51,7 +51,7 @@ impl Reader {
             Ok(value) => ReadOutput::Value(value),
             Err(errors) => {
                 println!("Parsing errors: {:?}", errors);
-                ReadOutput::ControlFlow(ControlFlow::Continue(()))
+                ReadOutput::Clear
             }
         }
     }

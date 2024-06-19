@@ -3,7 +3,6 @@ mod printer;
 mod reader;
 
 use rustyline::DefaultEditor;
-use std::ops::ControlFlow;
 
 use evaluator::{CompilerEvaluator, Evaluator, InterpreterEvaluator};
 use printer::{CompilerPrinter, InterpreterPrinter, Printer};
@@ -22,8 +21,8 @@ impl<O, E: Evaluator<Object = O>, P: Printer<Object = O>> Repl<E, P> {
         loop {
             let input = self.reader.read();
             match input {
-                ReadOutput::ControlFlow(ControlFlow::Break(())) => break,
-                ReadOutput::ControlFlow(ControlFlow::Continue(())) => continue,
+                ReadOutput::Exit => break,
+                ReadOutput::Clear => continue,
                 ReadOutput::Value(program) => {
                     let result = self.evaluator.evaluate(program);
                     self.printer.print(result)
