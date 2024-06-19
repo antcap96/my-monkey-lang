@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::object::Object;
 use crate::{
     code::{Instructions, OpCode},
     symbol_table::SymbolTable,
@@ -7,7 +8,6 @@ use crate::{
 use monkey_lang_core::ast::{
     BlockStatement, Expression, LetStatement, Program, ReturnStatement, Statement,
 };
-use monkey_lang_interpreter::object::Object;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -154,7 +154,7 @@ impl Compiler {
             }
             Expression::NullLiteral => {
                 self.emit(OpCode::Null);
-            },
+            }
             Expression::ArrayLiteral(array) => {
                 for element in array {
                     self.compile_expression(element)?;
@@ -206,8 +206,8 @@ impl Compiler {
                 self.emit(OpCode::GetGlobal(symbol.index as u16));
             }
             Expression::IndexExpression { left, index } => {
-                self.compile_expression(&left)?;
-                self.compile_expression(&index)?;
+                self.compile_expression(left)?;
+                self.compile_expression(index)?;
 
                 self.emit(OpCode::Index);
             }
@@ -265,9 +265,9 @@ pub struct Bytecode {
 #[cfg(test)]
 mod tests {
     use crate::code::OpCode;
+    use crate::object::Object;
     use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_core::parser::Parser;
-    use monkey_lang_interpreter::object::Object;
 
     fn validate_expression(input: &str, constants: Vec<Object>, instructions: Vec<OpCode>) {
         let tokenizer = Tokenizer::new(input);

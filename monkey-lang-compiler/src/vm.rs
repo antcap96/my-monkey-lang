@@ -1,7 +1,7 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
+use crate::object::Object;
 use monkey_lang_core::ast::HashKey;
-use monkey_lang_interpreter::object::Object;
 use thiserror::Error;
 
 use crate::{
@@ -178,7 +178,7 @@ impl Vm {
 
                     for _ in 0..size {
                         let top = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
-                        output.push(Rc::new(top)); // TODO: I don't think the array needs elements to be Rc'd
+                        output.push(top);
                     }
                     output.reverse();
 
@@ -193,11 +193,11 @@ impl Vm {
                         let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         output.insert(
-                            (&key)
+                            key.clone()
                                 .try_into()
-                                .map_err(|_| VmError::InvalidHashKey(key.clone()))?,
-                            (Rc::new(key), Rc::new(value)),
-                        ); // TODO: I don't think the hash needs elements to be Rc'd
+                                .map_err(VmError::InvalidHashKey)?,
+                            (key, value),
+                        );
                     }
 
                     self.stack.push(Object::Hash(output))
@@ -207,18 +207,17 @@ impl Vm {
                     let left = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
 
                     match (&left, &index) {
-                        (Object::Array(arr), Object::Integer(i)) => self.stack.push(
-                            arr.get(*i as usize)
-                                .map(|o| o.as_ref().clone())
-                                .unwrap_or(Object::Null),
-                        ),
+                        (Object::Array(arr), Object::Integer(i)) => self
+                            .stack
+                            .push(arr.get(*i as usize).cloned().unwrap_or(Object::Null)),
                         (Object::Hash(hash), index) => {
                             let key: HashKey = index
+                                .clone()
                                 .try_into()
                                 .map_err(|_| VmError::InvalidHashKey(index.clone()))?;
                             self.stack.push(
                                 hash.get(&key)
-                                    .map(|(_, value)| value.as_ref().clone())
+                                    .map(|(_, value)| value.clone())
                                     .unwrap_or(Object::Null),
                             )
                         }
@@ -238,11 +237,9 @@ impl Vm {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use super::*;
+    use crate::object::Object;
     use monkey_lang_core::{ast::HashKey, lexer::Tokenizer, parser::Parser};
-    use monkey_lang_interpreter::object::Object;
 
     use crate::compiler::Compiler;
 
@@ -373,17 +370,17 @@ mod tests {
             (
                 "[1, 2, 3]",
                 Object::Array(vec![
-                    Rc::new(Object::Integer(1)),
-                    Rc::new(Object::Integer(2)),
-                    Rc::new(Object::Integer(3)),
+                    Object::Integer(1),
+                    Object::Integer(2),
+                    Object::Integer(3),
                 ]),
             ),
             (
                 "[1 + 2, 3 * 4, 5 + 6]",
                 Object::Array(vec![
-                    Rc::new(Object::Integer(3)),
-                    Rc::new(Object::Integer(12)),
-                    Rc::new(Object::Integer(11)),
+                    Object::Integer(3),
+                    Object::Integer(12),
+                    Object::Integer(11),
                 ]),
             ),
         ];
@@ -401,11 +398,11 @@ mod tests {
                 Object::Hash(HashMap::from([
                     (
                         HashKey::Integer(1),
-                        (Rc::new(Object::Integer(1)), Rc::new(Object::Integer(2))),
+                        (Object::Integer(1), Object::Integer(2)),
                     ),
                     (
                         HashKey::Integer(2),
-                        (Rc::new(Object::Integer(2)), Rc::new(Object::Integer(3))),
+                        (Object::Integer(2), Object::Integer(3)),
                     ),
                 ])),
             ),
@@ -414,11 +411,11 @@ mod tests {
                 Object::Hash(HashMap::from([
                     (
                         HashKey::Integer(2),
-                        (Rc::new(Object::Integer(2)), Rc::new(Object::Integer(4))),
+                        (Object::Integer(2), Object::Integer(4)),
                     ),
                     (
                         HashKey::Integer(6),
-                        (Rc::new(Object::Integer(6)), Rc::new(Object::Integer(16))),
+                        (Object::Integer(6), Object::Integer(16)),
                     ),
                 ])),
             ),

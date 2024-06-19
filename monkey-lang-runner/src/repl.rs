@@ -1,12 +1,16 @@
-use std::error::Error;
+use std::rc::Rc;
 
 use monkey_lang_compiler::code::Instructions;
 use monkey_lang_compiler::compiler::Bytecode;
+use monkey_lang_compiler::compiler::CompilationError;
 use monkey_lang_compiler::symbol_table::SymbolTable;
+use monkey_lang_compiler::vm::VmError;
 use monkey_lang_core::ast::Program;
-use monkey_lang_interpreter::object::Object;
+use monkey_lang_interpreter::object::EvaluationError;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use rustyline::DefaultEditor;
+use std::ops::ControlFlow;
 
 use monkey_lang_compiler::compiler;
 use monkey_lang_compiler::vm;
@@ -14,11 +18,14 @@ use monkey_lang_core::lexer;
 use monkey_lang_core::parser;
 use monkey_lang_interpreter::environment;
 use monkey_lang_interpreter::evaluator;
+use rustyline::Editor;
 
 use crate::Mode;
 
 trait Evaluator {
-    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>>;
+    type Object;
+
+    fn evaluate(&mut self, program: Program) -> Self::Object;
 }
 
 struct InterpreterEvaluator {
@@ -34,12 +41,9 @@ impl InterpreterEvaluator {
 }
 
 impl Evaluator for InterpreterEvaluator {
-    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>> {
-        let object = evaluator::eval_program(&program, &mut self.environment);
-
-        object
-            .map(|obj| Some(obj.as_ref().clone()))
-            .map_err(|err| err.into())
+    type Object = Result<Rc<monkey_lang_interpreter::object::Object>, EvaluationError>;
+    fn evaluate(&mut self, program: Program) -> Self::Object {
+        evaluator::eval_program(&program, &mut self.environment)
     }
 }
 
@@ -60,8 +64,15 @@ impl CompilerEvaluator {
     }
 }
 
+enum CompilerError {
+    CompilationError(CompilationError),
+    VmError(VmError),
+}
+
 impl Evaluator for CompilerEvaluator {
-    fn evaluate(&mut self, program: Program) -> Result<Option<Object>, Box<dyn Error>> {
+    type Object = Result<Option<monkey_lang_compiler::object::Object>, CompilerError>;
+
+    fn evaluate(&mut self, program: Program) -> Self::Object {
         let constants = std::mem::take(&mut self.compiler.constants);
         let symbol_table = std::mem::replace(&mut self.compiler.symbol_table, SymbolTable::new());
         self.compiler = compiler::Compiler::new_with_state(constants, symbol_table);
@@ -74,63 +85,130 @@ impl Evaluator for CompilerEvaluator {
 
                 let res = self.machine.run();
                 res.map(|_| self.machine.last_popped_stack_element.clone())
-                    .map_err(|err| err.into())
+                    .map_err(CompilerError::VmError)
             }
-            Err(errors) => Err(errors.into()),
+            Err(error) => Err(CompilerError::CompilationError(error)),
+        }
+    }
+}
+
+enum ReadOutput {
+    ControlFlow(ControlFlow<(), ()>),
+    Value(Program),
+}
+
+struct Reader {
+    rl: Editor<(), DefaultHistory>,
+}
+
+impl Reader {
+    fn read(&mut self) -> ReadOutput {
+        let readline = self.rl.readline(PROMPT);
+
+        let line = match readline {
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                return ReadOutput::ControlFlow(ControlFlow::Continue(())); // Clear line
+            }
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                return ReadOutput::ControlFlow(ControlFlow::Break(()));
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+                return ReadOutput::ControlFlow(ControlFlow::Break(()));
+            }
+            Ok(line) => {
+                self.rl.add_history_entry(&line).unwrap(); // TODO: why can this fail?
+                line
+            }
+        };
+
+        let tokenizer = lexer::Tokenizer::new(&line);
+        let program = parser::Parser::new(tokenizer).parse_program();
+
+        match program {
+            Ok(value) => ReadOutput::Value(value),
+            Err(errors) => {
+                println!("Parsing errors: {:?}", errors);
+                ReadOutput::ControlFlow(ControlFlow::Continue(()))
+            }
+        }
+    }
+}
+
+trait Printer {
+    type Object;
+
+    fn print(&mut self, object: Self::Object);
+}
+
+struct InterpreterPrinter {}
+
+impl Printer for InterpreterPrinter {
+    type Object = Result<Rc<monkey_lang_interpreter::object::Object>, EvaluationError>;
+
+    fn print(&mut self, object: Self::Object) {
+        match object {
+            Ok(obj) => println!("{:?}", obj),
+            Err(err) => println!("Error evaluating:\n{}", err),
+        }
+    }
+}
+
+struct CompilerPrinter {}
+
+impl Printer for CompilerPrinter {
+    type Object = Result<Option<monkey_lang_compiler::object::Object>, CompilerError>;
+
+    fn print(&mut self, object: Self::Object) {
+        match object {
+            Ok(obj) => println!("{:?}", obj),
+            Err(CompilerError::CompilationError(err)) => println!("Error compiling:\n{}", err),
+            Err(CompilerError::VmError(err)) => println!("Vm error:\n{}", err),
+        }
+    }
+}
+
+struct Repl<E: Evaluator, P: Printer> {
+    reader: Reader,
+    evaluator: E,
+    printer: P,
+}
+
+impl<O, E: Evaluator<Object = O>, P: Printer<Object = O>> Repl<E, P> {
+    fn run(mut self) {
+        loop {
+            let read_ouput = self.reader.read();
+            match read_ouput {
+                ReadOutput::ControlFlow(ControlFlow::Break(())) => break,
+                ReadOutput::ControlFlow(ControlFlow::Continue(())) => continue,
+                ReadOutput::Value(program) => {
+                    let result = self.evaluator.evaluate(program);
+                    self.printer.print(result)
+                }
+            }
         }
     }
 }
 
 const PROMPT: &str = ">> ";
 
-pub fn start(mode: Mode) -> Result<(), ReadlineError> {
-    let mut rl = DefaultEditor::new()?;
-    let mut content: String;
+pub fn start(mode: Mode) {
+    let rl = DefaultEditor::new().unwrap();
 
-    let mut evaluator: Box<dyn Evaluator> = match mode {
-        Mode::Interpreter => Box::new(InterpreterEvaluator::new()),
-        Mode::Compiler => Box::new(CompilerEvaluator::new()),
+    match mode {
+        Mode::Interpreter => Repl {
+            reader: Reader { rl },
+            evaluator: InterpreterEvaluator::new(),
+            printer: InterpreterPrinter {},
+        }
+        .run(),
+        Mode::Compiler => Repl {
+            reader: Reader { rl },
+            evaluator: CompilerEvaluator::new(),
+            printer: CompilerPrinter {},
+        }
+        .run(),
     };
-
-    loop {
-        let readline = rl.readline(PROMPT);
-
-        match readline {
-            Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                continue; // Clear line
-            }
-            Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
-                break;
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
-            }
-            Ok(line) => {
-                rl.add_history_entry(line.as_str())?;
-                content = line;
-            }
-        }
-
-        let tokenizer = lexer::Tokenizer::new(&content);
-        let program = parser::Parser::new(tokenizer).parse_program();
-
-        match program {
-            Ok(program) => match evaluator.evaluate(program) {
-                Ok(Some(obj)) => {
-                    println!("{:?}", obj);
-                }
-                Ok(None) => {}
-                Err(err) => {
-                    println!("{}", err);
-                }
-            },
-            Err(errors) => {
-                println!("{:?}", errors);
-            }
-        }
-    }
-    Ok(())
 }
