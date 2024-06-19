@@ -193,9 +193,7 @@ impl Vm {
                         let value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         let key = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                         output.insert(
-                            key.clone()
-                                .try_into()
-                                .map_err(VmError::InvalidHashKey)?,
+                            key.clone().try_into().map_err(VmError::InvalidHashKey)?,
                             (key, value),
                         );
                     }
