@@ -227,6 +227,9 @@ impl Vm {
                         }
                     }
                 }
+                OpCode::Call => todo!(),
+                OpCode::Return => todo!(),
+                OpCode::ReturnValue => todo!(),
             }
         }
         Ok(())

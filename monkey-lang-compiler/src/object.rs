@@ -11,13 +11,13 @@ pub enum Object {
     String(String),
     Array(Vec<Object>),
     Hash(HashMap<ast::HashKey, (Object, Object)>),
-    BuiltinFunction(BuiltinFunction),
+    CompiledFunction(CompiledFunction),
     Null,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BuiltinFunction {
-    instructions: Instructions,
+pub struct CompiledFunction {
+    pub instructions: Instructions,
 }
 
 impl TryFrom<Object> for ast::HashKey {

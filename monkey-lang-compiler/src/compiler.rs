@@ -31,6 +31,9 @@ pub struct Compiler {
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
     pub symbol_table: SymbolTable,
+    scopes: Vec<CompilationScope>,
+    scope_index: usize,
+
 }
 
 impl Compiler {
@@ -41,6 +44,8 @@ impl Compiler {
             last_instruction: None,
             previous_instruction: None,
             symbol_table: SymbolTable::new(),
+            scopes: Vec::new(),
+            scope_index: 0
         }
     }
 
@@ -51,6 +56,8 @@ impl Compiler {
             last_instruction: None,
             previous_instruction: None,
             symbol_table,
+            scopes: Vec::new(),
+            scope_index: 0
         }
     }
 
@@ -256,6 +263,13 @@ impl Default for Compiler {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CompilationScope {
+    instructions: Instructions,
+    last_instruction: Option<EmittedInstruction>,
+    previous_instruction: Option<EmittedInstruction>
+}
+
 #[derive(Debug)]
 pub struct Bytecode {
     pub instructions: Instructions,
@@ -264,8 +278,8 @@ pub struct Bytecode {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::OpCode;
-    use crate::object::Object;
+    use crate::code::{Instructions, OpCode};
+    use crate::object::{CompiledFunction, Object};
     use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_core::parser::Parser;
 
@@ -665,6 +679,31 @@ mod tests {
                 ],
             ),
         ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_functions() {
+        let tests = [(
+            "fn() { return 5 + 10 }",
+            vec![
+                Object::Integer(5),
+                Object::Integer(10),
+                Object::CompiledFunction(CompiledFunction {
+                    instructions: [
+                        OpCode::Constant(0),
+                        OpCode::Constant(1),
+                        OpCode::Add,
+                        OpCode::ReturnValue,
+                    ]
+                    .into(),
+                }),
+            ],
+            vec![OpCode::Constant(2), OpCode::Pop],
+        )];
+
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }

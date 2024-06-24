@@ -24,6 +24,9 @@ pub enum OpCode {
     Array(u16),
     Hash(u16),
     Index,
+    Call,
+    ReturnValue,
+    Return,
 }
 
 impl OpCode {
@@ -85,6 +88,9 @@ impl OpCode {
                 out.into()
             }
             OpCode::Index => [OpCodeId::Index as u8].into(),
+            OpCode::Call => [OpCodeId::Call as u8].into(),
+            OpCode::ReturnValue => [OpCodeId::ReturnValue as u8].into(),
+            OpCode::Return => [OpCodeId::Return as u8].into(),
         }
     }
 }
@@ -113,6 +119,9 @@ pub enum OpCodeId {
     Array,
     Hash,
     Index,
+    Call,
+    ReturnValue,
+    Return,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -191,9 +200,6 @@ impl<'a> Iterator for InstructionsIter<'a> {
     type Item = Result<OpCode, InstructionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // if self.offset >= self.instructions.bytes.len() {
-        //     return None;
-        // }
 
         let op = self.read_u8()?;
 
@@ -265,6 +271,19 @@ impl<'a> Iterator for InstructionsIter<'a> {
                 }
             }
             OpCodeId::Index => Some(Ok(OpCode::Index)),
+            OpCodeId::Call => Some(Ok(OpCode::Call)),
+            OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
+            OpCodeId::Return => Some(Ok(OpCode::Return)),
         }
+    }
+}
+
+impl<T: IntoIterator<Item = OpCode>> From<T> for Instructions {
+    fn from(value: T) -> Self {
+        let mut output = Instructions::new();
+        for element in value {
+            output.push(&element)
+        }
+        output
     }
 }
