@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::object::Object;
+use crate::object::{CompiledFunction, Object};
 use monkey_lang_core::ast::HashKey;
 use thiserror::Error;
 
@@ -21,32 +21,53 @@ pub enum VmError {
     InvalidHashKey(Object),
 }
 
+// TODO: Should this be iterable instead of Instructions?
+struct Frame {
+    // TODO: Why does this have a `CompiledFunction` instead of `Instructions`?
+    function: CompiledFunction,
+    ip: usize,
+}
+
+impl Frame {
+    fn new(function: CompiledFunction) -> Self {
+        Self { function, ip: 0 }
+    }
+
+    fn instructions(&self) -> &Instructions {
+        &self.function.instructions
+    }
+}
+
 pub struct Vm {
     constants: Vec<Object>,
-    instructions: Instructions,
     stack: Vec<Object>,
     pub globals: Vec<Object>,
     pub last_popped_stack_element: Option<Object>,
+    frames: Vec<Frame>,
 }
 
 impl Vm {
     pub fn new(bytecode: Bytecode) -> Vm {
         Vm {
             constants: bytecode.constants,
-            instructions: bytecode.instructions,
             stack: Vec::new(),
             last_popped_stack_element: None,
             globals: Vec::new(),
+            frames: vec![Frame::new(CompiledFunction {
+                instructions: bytecode.instructions,
+            })],
         }
     }
 
     pub fn new_with_global_store(bytecode: Bytecode, globals: Vec<Object>) -> Vm {
         Vm {
             constants: bytecode.constants,
-            instructions: bytecode.instructions,
             stack: Vec::new(),
             last_popped_stack_element: None,
             globals,
+            frames: vec![Frame::new(CompiledFunction {
+                instructions: bytecode.instructions,
+            })],
         }
     }
 
@@ -56,7 +77,7 @@ impl Vm {
 
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
-        let mut iter = self.instructions.iter();
+        let mut iter = self.frames.last().unwrap().function.instructions.iter();
         while let Some(op) = iter.next() {
             let op = op?;
 
@@ -151,18 +172,31 @@ impl Vm {
                     self.last_popped_stack_element = Some(popped);
                 }
                 OpCode::Jump(offset) => {
-                    iter = self.instructions.iter_at(offset as usize);
+                    iter = self
+                        .frames
+                        .last()
+                        .unwrap()
+                        .instructions()
+                        .iter_at(offset as usize);
                 }
                 OpCode::JumpFalse(offset) => {
                     let condition = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     if Object::Boolean(false) == condition {
-                        iter = self.instructions.iter_at(offset as usize);
+                        iter = self
+                            .frames
+                            .last()
+                            .unwrap()
+                            .instructions()
+                            .iter_at(offset as usize);
                     }
                 }
                 OpCode::Null => self.stack.push(Object::Null),
                 OpCode::SetGlobal(index) => {
                     let object = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
-                    // TODO: what if globals is not populated enough?
+                    // If globals is not populated enough, fill it with `Object::Null`
+                    for _ in self.globals.len()..index as usize {
+                        self.globals.push(Object::Null);
+                    }
                     self.globals.insert(index as usize, object);
                 }
                 OpCode::GetGlobal(index) => {
@@ -227,9 +261,43 @@ impl Vm {
                         }
                     }
                 }
-                OpCode::Call => todo!(),
-                OpCode::Return => todo!(),
-                OpCode::ReturnValue => todo!(),
+                OpCode::Call => {
+                    let object = self.stack.last().ok_or(VmError::EmptyStack(op))?;
+                    match object {
+                        Object::CompiledFunction(function) => {
+                            let ip = iter.ip;
+                            self.frames.last_mut().map(|el| el.ip = ip);
+                            self.frames.push(Frame {
+                                function: function.clone(),
+                                ip: 0,
+                            });
+                            iter = self.frames.last().unwrap().instructions().iter();
+                        }
+                        _ => {
+                            return Err(VmError::InvalidOperation(
+                                OpCode::Call,
+                                vec![object.clone()],
+                            ))
+                        }
+                    }
+                }
+                OpCode::Return => {
+                    self.frames.pop();
+                    let frame = self.frames.last().unwrap();
+                    let ip = frame.ip;
+                    iter = frame.instructions().iter_at(ip);
+                    let _function = self.stack.pop();
+                    self.stack.push(Object::Null);
+                }
+                OpCode::ReturnValue => {
+                    let return_value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                    self.frames.pop();
+                    let frame = self.frames.last().unwrap();
+                    let ip = frame.ip;
+                    iter = frame.instructions().iter_at(ip);
+                    let _function = self.stack.pop();
+                    self.stack.push(return_value);
+                }
             }
         }
         Ok(())
@@ -440,6 +508,92 @@ mod tests {
             ("{1: 1}[0]", Object::Null),
             ("{}[0]", Object::Null),
         ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_calling_function_with_no_arguments() {
+        let tests = [
+            (
+                "
+                let fivePlusTen = fn() { 5 + 10; };
+                fivePlusTen();",
+                Object::Integer(15),
+            ),
+            (
+                "
+                let one = fn() { 1; };
+                let two = fn() { 2; };
+                one() + two()",
+                Object::Integer(3),
+            ),
+            (
+                "
+                let a = fn() { 1 };
+                let b = fn() { a() + 1 };
+                let c = fn() { b() + 1 };
+                c();",
+                Object::Integer(3),
+            ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_functions_with_return_statements() {
+        let tests = [
+            (
+                "
+                let earlyExit = fn() { return 99; 100; };
+                earlyExit();",
+                Object::Integer(99),
+            ),
+            (
+                "
+                let earlyExit = fn() { return 99; return 100; };
+                earlyExit();",
+                Object::Integer(99),
+            ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_functions_without_return_value() {
+        let tests = [
+            (
+                "
+                let empty = fn() {};
+                empty();",
+                Object::Null,
+            ),
+            (
+                "
+                let let_statement = fn() { let x = 1; };
+                let_statement();",
+                Object::Null,
+            ),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_first_class_functions() {
+        let tests = [(
+            "
+            let returnsOne = fn () { 1 };
+            let returnsOneReturner = fn() { returnsOne };
+            returnsOneReturner()()",
+            Object::Integer(1),
+        )];
         for (input, output) in tests {
             validate_expression(input, output)
         }

@@ -139,7 +139,7 @@ impl Instructions {
     pub fn iter_at(&self, offset: usize) -> InstructionsIter {
         InstructionsIter {
             instructions: self,
-            offset,
+            ip: offset,
         }
     }
 
@@ -204,12 +204,12 @@ impl Default for Instructions {
 
 pub struct InstructionsIter<'a> {
     instructions: &'a Instructions,
-    offset: usize,
+    pub ip: usize,
 }
 impl<'a> InstructionsIter<'a> {
     fn read_u8(&mut self) -> Option<u8> {
-        let offset = self.offset;
-        self.offset += 1;
+        let offset = self.ip;
+        self.ip += 1;
         self.instructions.bytes.get(offset).copied()
     }
 
