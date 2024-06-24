@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::object::Object;
+use crate::object::{CompiledFunction, Object};
 use crate::{
     code::{Instructions, OpCode},
     symbol_table::SymbolTable,
@@ -26,38 +26,28 @@ pub struct EmittedInstruction {
 
 #[derive(Debug, Clone)]
 pub struct Compiler {
-    instructions: Instructions,
     pub constants: Vec<Object>,
-    last_instruction: Option<EmittedInstruction>,
-    previous_instruction: Option<EmittedInstruction>,
     pub symbol_table: SymbolTable,
     scopes: Vec<CompilationScope>,
     scope_index: usize,
-
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            instructions: Instructions::new(),
             constants: Vec::new(),
-            last_instruction: None,
-            previous_instruction: None,
             symbol_table: SymbolTable::new(),
-            scopes: Vec::new(),
-            scope_index: 0
+            scopes: vec![CompilationScope::new()],
+            scope_index: 0,
         }
     }
 
     pub fn new_with_state(constants: Vec<Object>, symbol_table: SymbolTable) -> Self {
         Compiler {
-            instructions: Instructions::new(),
             constants,
-            last_instruction: None,
-            previous_instruction: None,
             symbol_table,
-            scopes: Vec::new(),
-            scope_index: 0
+            scopes: vec![CompilationScope::new()],
+            scope_index: 0,
         }
     }
 
@@ -74,19 +64,61 @@ impl Compiler {
         position
     }
 
+    fn enter_scope(&mut self) {
+        self.scopes.push(CompilationScope::new());
+        self.scope_index += 1;
+    }
+
+    fn leave_scope(&mut self) -> Instructions {
+        // Panics if scopes is empty
+        let scope = self.scopes.pop().unwrap();
+        self.scope_index -= 1;
+
+        scope.instructions
+    }
+
+    fn current_scope_mut(&mut self) -> &mut CompilationScope {
+        &mut self.scopes[self.scope_index]
+    }
+
+    fn current_scope(&self) -> &CompilationScope {
+        &self.scopes[self.scope_index]
+    }
+
+    fn current_instructions_mut(&mut self) -> &mut Instructions {
+        &mut self.current_scope_mut().instructions
+    }
+
+    fn current_instructions(&self) -> &Instructions {
+        &self.current_scope().instructions
+    }
+
+    fn last_opcode(&self) -> Option<&OpCode> {
+        self.current_scope()
+            .last_instruction
+            .as_ref()
+            .map(|i| &i.op)
+    }
+
     fn set_last_instruction(&mut self, op: EmittedInstruction) {
-        self.previous_instruction = std::mem::replace(&mut self.last_instruction, Some(op));
+        self.current_scope_mut().previous_instruction =
+            std::mem::replace(&mut self.current_scope_mut().last_instruction, Some(op));
     }
 
     fn remove_last_instruction(&mut self) {
         // This will crash if there is no last instruction
-        self.instructions
-            .pop_to(self.last_instruction.as_ref().unwrap().position);
+        let to = self
+            .current_scope()
+            .last_instruction
+            .as_ref()
+            .unwrap()
+            .position;
+        self.current_instructions_mut().pop_to(to);
     }
 
     pub fn add_instruction(&mut self, op: &OpCode) -> usize {
-        let position = self.instructions.len();
-        self.instructions.push(op);
+        let position = self.current_instructions().len();
+        self.current_instructions_mut().push(op);
         position
     }
 
@@ -96,7 +128,7 @@ impl Compiler {
         }
         Ok(Bytecode {
             constants: self.constants.clone(),
-            instructions: self.instructions.clone(),
+            instructions: self.current_instructions().clone(),
         })
     }
 
@@ -183,27 +215,25 @@ impl Compiler {
                 self.compile_expression(condition)?;
                 let first_jump_pos = self.emit(OpCode::JumpFalse(u16::MAX));
                 self.compile_block_statement(consequence)?;
-                if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
+                if let Some(OpCode::Pop) = self.last_opcode() {
                     self.remove_last_instruction();
                 }
                 let second_jump_pos = self.emit(OpCode::Jump(u16::MAX));
-                self.instructions.replace(
-                    first_jump_pos,
-                    OpCode::JumpFalse(self.instructions.len() as u16),
-                );
+                let len = self.current_instructions().len() as u16;
+                self.current_instructions_mut()
+                    .replace(first_jump_pos, OpCode::JumpFalse(len));
 
                 if let Some(alternative) = alternative {
                     self.compile_block_statement(alternative)?;
-                    if let Some(OpCode::Pop) = self.last_instruction.as_ref().map(|i| &i.op) {
+                    if let Some(OpCode::Pop) = self.last_opcode() {
                         self.remove_last_instruction();
                     }
                 } else {
                     self.emit(OpCode::Null);
                 }
-                self.instructions.replace(
-                    second_jump_pos,
-                    OpCode::Jump(self.instructions.len() as u16),
-                );
+                let len = self.current_instructions().len() as u16;
+                self.current_instructions_mut()
+                    .replace(second_jump_pos, OpCode::Jump(len));
             }
             Expression::Identifier(identifier) => {
                 let symbol = self.symbol_table.resolve(&identifier.name);
@@ -218,11 +248,38 @@ impl Compiler {
 
                 self.emit(OpCode::Index);
             }
-            Expression::FunctionLiteral { parameters, body } => todo!(),
+            Expression::FunctionLiteral { parameters, body } => {
+                self.enter_scope();
+                self.compile_block_statement(body)?;
+
+                match self.last_opcode() {
+                    // Function ended with an explicit return, nothing to do
+                    Some(OpCode::ReturnValue) => {}
+                    // Function ended in a `ExpressionStatement`, we replace `Pop` with
+                    // `ReturnValue` to handle implicit returns.
+                    Some(OpCode::Pop) => {
+                        self.remove_last_instruction();
+                        self.emit(OpCode::ReturnValue);
+                    }
+                    // Function ended with a statement that is not a `ReturnStatement`
+                    // or a `ExpressionStatement`, so we return null.
+                    _ => {
+                        self.emit(OpCode::Return);
+                    }
+                }
+
+                let instructions = self.leave_scope();
+                let id =
+                    self.add_constant(Object::CompiledFunction(CompiledFunction { instructions }));
+                self.emit(OpCode::Constant(id));
+            }
             Expression::CallExpression {
                 function,
                 arguments,
-            } => todo!(),
+            } => {
+                self.compile_expression(function)?;
+                self.emit(OpCode::Call);
+            }
             Expression::MatchExpression { expression, cases } => todo!(),
         }
         Ok(())
@@ -251,9 +308,11 @@ impl Compiler {
 
     pub fn compile_return_statement(
         &mut self,
-        _statement: &ReturnStatement,
+        statement: &ReturnStatement,
     ) -> Result<(), CompilationError> {
-        Err(CompilationError::TODO)
+        self.compile_expression(&statement.value)?;
+        self.emit(OpCode::ReturnValue);
+        Ok(())
     }
 }
 
@@ -263,11 +322,21 @@ impl Default for Compiler {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct CompilationScope {
     instructions: Instructions,
     last_instruction: Option<EmittedInstruction>,
-    previous_instruction: Option<EmittedInstruction>
+    previous_instruction: Option<EmittedInstruction>,
+}
+
+impl CompilationScope {
+    fn new() -> Self {
+        CompilationScope {
+            instructions: Instructions::new(),
+            last_instruction: None,
+            previous_instruction: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -278,7 +347,7 @@ pub struct Bytecode {
 
 #[cfg(test)]
 mod tests {
-    use crate::code::{Instructions, OpCode};
+    use crate::code::OpCode;
     use crate::object::{CompiledFunction, Object};
     use monkey_lang_core::lexer::Tokenizer;
     use monkey_lang_core::parser::Parser;
@@ -686,24 +755,81 @@ mod tests {
 
     #[test]
     fn test_functions() {
-        let tests = [(
-            "fn() { return 5 + 10 }",
-            vec![
-                Object::Integer(5),
-                Object::Integer(10),
-                Object::CompiledFunction(CompiledFunction {
-                    instructions: [
-                        OpCode::Constant(0),
-                        OpCode::Constant(1),
-                        OpCode::Add,
-                        OpCode::ReturnValue,
-                    ]
-                    .into(),
-                }),
-            ],
-            vec![OpCode::Constant(2), OpCode::Pop],
-        )];
+        let tests = [
+            (
+                "fn() { return 5 + 10 }",
+                vec![
+                    Object::Integer(5),
+                    Object::Integer(10),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [
+                            OpCode::Constant(0),
+                            OpCode::Constant(1),
+                            OpCode::Add,
+                            OpCode::ReturnValue,
+                        ]
+                        .into(),
+                    }),
+                ],
+                vec![OpCode::Constant(2), OpCode::Pop],
+            ),
+            (
+                "fn() { 5 + 10 }",
+                vec![
+                    Object::Integer(5),
+                    Object::Integer(10),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [
+                            OpCode::Constant(0),
+                            OpCode::Constant(1),
+                            OpCode::Add,
+                            OpCode::ReturnValue,
+                        ]
+                        .into(),
+                    }),
+                ],
+                vec![OpCode::Constant(2), OpCode::Pop],
+            ),
+        ];
 
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_function_calls() {
+        let tests = [
+            (
+                "fn() { 24 }();",
+                vec![
+                    Object::Integer(24),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
+                    }),
+                ],
+                vec![OpCode::Constant(1), OpCode::Call, OpCode::Pop],
+            ),
+            (
+                "
+                let noArg = fn() { 24 };
+                noArg();
+                ",
+                vec![
+                    Object::Integer(24),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
+                    }),
+                ],
+                vec![
+                    OpCode::Constant(1),
+                    OpCode::SetGlobal(0),
+                    OpCode::GetGlobal(0),
+                    OpCode::Call,
+                    OpCode::Pop,
+                ],
+            ),
+        ];
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }

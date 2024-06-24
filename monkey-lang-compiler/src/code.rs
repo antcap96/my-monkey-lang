@@ -1,3 +1,5 @@
+use std::{fmt::Debug, iter::Scan};
+
 use num_enum::TryFromPrimitive;
 use thiserror::Error;
 
@@ -124,7 +126,7 @@ pub enum OpCodeId {
     Return,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Instructions {
     pub bytes: Vec<u8>,
 }
@@ -164,6 +166,36 @@ impl Instructions {
     }
 }
 
+fn take_while_inclusive<It, F>(
+    iter: It,
+    mut f: F,
+) -> Scan<It, bool, impl FnMut(&mut bool, It::Item) -> Option<It::Item>>
+where
+    It: Iterator,
+    F: FnMut(&It::Item) -> bool,
+{
+    iter.scan(false, move |terminate, e| {
+        if *terminate {
+            None
+        } else {
+            if f(&e) {
+                Some(e)
+            } else {
+                *terminate = true;
+                Some(e)
+            }
+        }
+    })
+}
+
+impl Debug for Instructions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(take_while_inclusive(self.iter(), |el| el.is_ok()))
+            .finish()
+    }
+}
+
 impl Default for Instructions {
     fn default() -> Self {
         Self::new()
@@ -200,7 +232,6 @@ impl<'a> Iterator for InstructionsIter<'a> {
     type Item = Result<OpCode, InstructionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-
         let op = self.read_u8()?;
 
         let Ok(op): Result<OpCodeId, _> = op.try_into() else {
