@@ -18,6 +18,7 @@ pub enum Object {
 #[derive(Debug, PartialEq, Clone)]
 pub struct CompiledFunction {
     pub instructions: Instructions,
+    pub num_locals: usize,
 }
 
 impl TryFrom<Object> for ast::HashKey {

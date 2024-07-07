@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use crate::object::{CompiledFunction, Object};
+use crate::symbol_table::Scope;
 use crate::{
     code::{Instructions, OpCode},
     symbol_table::SymbolTable,
@@ -67,12 +68,14 @@ impl Compiler {
     fn enter_scope(&mut self) {
         self.scopes.push(CompilationScope::new());
         self.scope_index += 1;
+        self.symbol_table = SymbolTable::new_enclosed(std::mem::take(&mut self.symbol_table));
     }
 
     fn leave_scope(&mut self) -> Instructions {
         // Panics if scopes is empty
         let scope = self.scopes.pop().unwrap();
         self.scope_index -= 1;
+        self.symbol_table = *self.symbol_table.outer.take().unwrap();
 
         scope.instructions
     }
@@ -240,7 +243,10 @@ impl Compiler {
                 let Some(symbol) = symbol else {
                     return Err(CompilationError::UnknownIdentifier(identifier.name.clone()));
                 };
-                self.emit(OpCode::GetGlobal(symbol.index as u16));
+                match symbol.scope {
+                    Scope::Global => self.emit(OpCode::GetGlobal(symbol.index as u16)),
+                    Scope::Local => self.emit(OpCode::GetLocal(symbol.index as u8)),
+                };
             }
             Expression::IndexExpression { left, index } => {
                 self.compile_expression(left)?;
@@ -268,9 +274,12 @@ impl Compiler {
                     }
                 }
 
+                let num_locals = self.symbol_table.num_definitions;
                 let instructions = self.leave_scope();
-                let id =
-                    self.add_constant(Object::CompiledFunction(CompiledFunction { instructions }));
+                let id = self.add_constant(Object::CompiledFunction(CompiledFunction {
+                    instructions,
+                    num_locals,
+                }));
                 self.emit(OpCode::Constant(id));
             }
             Expression::CallExpression {
@@ -301,8 +310,17 @@ impl Compiler {
     ) -> Result<(), CompilationError> {
         self.compile_expression(&statement.value)?;
         let symbol = self.symbol_table.define(statement.identifier.name.clone());
-        let index = symbol.index;
-        self.emit(OpCode::SetGlobal(index as u16));
+        match symbol.scope {
+            Scope::Global => {
+                let index = symbol.index;
+                self.emit(OpCode::SetGlobal(index as u16))
+            }
+            Scope::Local => {
+                let index = symbol.index;
+                self.emit(OpCode::SetLocal(index as u8))
+            }
+        };
+
         Ok(())
     }
 
@@ -769,6 +787,7 @@ mod tests {
                             OpCode::ReturnValue,
                         ]
                         .into(),
+                        num_locals: 0,
                     }),
                 ],
                 vec![OpCode::Constant(2), OpCode::Pop],
@@ -786,6 +805,7 @@ mod tests {
                             OpCode::ReturnValue,
                         ]
                         .into(),
+                        num_locals: 0,
                     }),
                 ],
                 vec![OpCode::Constant(2), OpCode::Pop],
@@ -806,6 +826,7 @@ mod tests {
                     Object::Integer(24),
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
+                        num_locals: 0,
                     }),
                 ],
                 vec![OpCode::Constant(1), OpCode::Call, OpCode::Pop],
@@ -819,6 +840,7 @@ mod tests {
                     Object::Integer(24),
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
+                        num_locals: 0,
                     }),
                 ],
                 vec![
@@ -830,6 +852,81 @@ mod tests {
                 ],
             ),
         ];
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_let_statements_scopes() {
+        let tests = [
+            (
+                "let num = 55;
+                 fn() { num }",
+                vec![
+                    Object::Integer(55),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [OpCode::GetGlobal(0), OpCode::ReturnValue].into(),
+                        num_locals: 0,
+                    }),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::Constant(1),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "
+                fn() {
+                    let num = 55;
+                    num
+                }",
+                vec![
+                    Object::Integer(55),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [
+                            OpCode::Constant(0),
+                            OpCode::SetLocal(0),
+                            OpCode::GetLocal(0),
+                            OpCode::ReturnValue,
+                        ]
+                        .into(),
+                        num_locals: 1,
+                    }),
+                ],
+                vec![OpCode::Constant(1), OpCode::Pop],
+            ),
+            (
+                "
+                fn() {
+                    let a = 55;
+                    let b = 77;
+                    a + b
+                }",
+                vec![
+                    Object::Integer(55),
+                    Object::Integer(77),
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [
+                            OpCode::Constant(0),
+                            OpCode::SetLocal(0),
+                            OpCode::Constant(1),
+                            OpCode::SetLocal(1),
+                            OpCode::GetLocal(0),
+                            OpCode::GetLocal(1),
+                            OpCode::Add,
+                            OpCode::ReturnValue,
+                        ]
+                        .into(),
+                        num_locals: 2,
+                    }),
+                ],
+                vec![OpCode::Constant(2), OpCode::Pop],
+            ),
+        ];
+
         for (input, constants, instructions) in tests {
             validate_expression(input, constants, instructions);
         }

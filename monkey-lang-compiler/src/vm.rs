@@ -55,6 +55,7 @@ impl Vm {
             globals: Vec::new(),
             frames: vec![Frame::new(CompiledFunction {
                 instructions: bytecode.instructions,
+                num_locals: 0,
             })],
         }
     }
@@ -67,6 +68,7 @@ impl Vm {
             globals,
             frames: vec![Frame::new(CompiledFunction {
                 instructions: bytecode.instructions,
+                num_locals: 0,
             })],
         }
     }
@@ -298,6 +300,8 @@ impl Vm {
                     let _function = self.stack.pop();
                     self.stack.push(return_value);
                 }
+                OpCode::SetLocal(index) => todo!(),
+                OpCode::GetLocal(index) => todo!(),
             }
         }
         Ok(())
@@ -594,6 +598,50 @@ mod tests {
             returnsOneReturner()()",
             Object::Integer(1),
         )];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_calling_functions_with_bindings() {
+        let tests = [
+            (
+                "let one = fn() { let one = 1; one };
+                 one();",
+                Object::Integer(1),
+            ),
+            (
+                "let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+                 oneAndTwo();",
+                Object::Integer(3),
+            ),
+            (
+                "let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
+                 oneAndTwo() + threeAndFour();",
+                Object::Integer(10),
+            ),
+            (
+                "let firstFoobar = fn() { let foobar = 50; foobar; };
+                 let secondFoobar = fn() { let foobar = 100; foobar; };
+                 firstFoobar() + secondFoobar();",
+                Object::Integer(150),
+            ),
+            (
+                "let globalSeed = 50;
+                 let minusOne = fn() {
+                     let num = 1;
+                     globalSeed - num;
+                 }
+                 let minusTwo = fn() {
+                     let num = 2;
+                     globalSeed - num;
+                 }
+                 minusOne() + minusTwo();",
+                Object::Integer(97),
+            ),
+        ];
+
         for (input, output) in tests {
             validate_expression(input, output)
         }

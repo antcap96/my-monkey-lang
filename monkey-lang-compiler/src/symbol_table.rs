@@ -3,6 +3,7 @@ use std::{collections::HashMap, rc::Rc};
 #[derive(Debug, PartialEq, Clone)]
 pub enum Scope {
     Global,
+    Local,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -16,6 +17,7 @@ pub struct Symbol {
 pub struct SymbolTable {
     store: HashMap<Rc<str>, Symbol>,
     pub num_definitions: usize,
+    pub outer: Option<Box<SymbolTable>>,
 }
 
 impl SymbolTable {
@@ -23,14 +25,30 @@ impl SymbolTable {
         SymbolTable {
             store: HashMap::new(),
             num_definitions: 0,
+            outer: None,
+        }
+    }
+
+    pub fn new_enclosed(symbol_table: SymbolTable) -> SymbolTable {
+        SymbolTable {
+            store: HashMap::new(),
+            num_definitions: 0,
+            outer: Some(Box::new(symbol_table)),
         }
     }
 
     pub fn define(&mut self, name: Rc<str>) -> &Symbol {
-        let symbol = Symbol {
-            name: name.clone(),
-            scope: Scope::Global,
-            index: self.num_definitions,
+        let symbol = match self.outer {
+            Some(_) => Symbol {
+                name: name.clone(),
+                scope: Scope::Local,
+                index: self.num_definitions,
+            },
+            None => Symbol {
+                name: name.clone(),
+                scope: Scope::Global,
+                index: self.num_definitions,
+            },
         };
         self.store.insert(name.clone(), symbol);
         self.num_definitions += 1;
@@ -38,7 +56,11 @@ impl SymbolTable {
     }
 
     pub fn resolve(&self, name: &str) -> Option<&Symbol> {
-        self.store.get(name)
+        self.store.get(name).or_else(|| {
+            self.outer
+                .as_ref()
+                .and_then(|store| store.as_ref().resolve(name))
+        })
     }
 }
 
@@ -76,6 +98,7 @@ mod tests {
                 ),
             ]),
             num_definitions: 2,
+            outer: None,
         };
         let mut global = SymbolTable::new();
         global.define(a.clone());
@@ -103,6 +126,55 @@ mod tests {
             Some(&Symbol {
                 name: b.clone(),
                 scope: Scope::Global,
+                index: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn test_resolve_local() {
+        let a: Rc<str> = Rc::from("a");
+        let b: Rc<str> = Rc::from("b");
+        let c: Rc<str> = Rc::from("c");
+        let d: Rc<str> = Rc::from("d");
+
+        let mut global = SymbolTable::new();
+        global.define(a.clone());
+        global.define(b.clone());
+
+        let mut local = SymbolTable::new_enclosed(global);
+        local.define(c.clone());
+        local.define(d.clone());
+
+        assert_eq!(
+            local.resolve(&a),
+            Some(&Symbol {
+                name: a.clone(),
+                scope: Scope::Global,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            local.resolve(&b),
+            Some(&Symbol {
+                name: b.clone(),
+                scope: Scope::Global,
+                index: 1,
+            })
+        );
+        assert_eq!(
+            local.resolve(&c),
+            Some(&Symbol {
+                name: c.clone(),
+                scope: Scope::Local,
+                index: 0,
+            })
+        );
+        assert_eq!(
+            local.resolve(&d),
+            Some(&Symbol {
+                name: d.clone(),
+                scope: Scope::Local,
                 index: 1,
             })
         );

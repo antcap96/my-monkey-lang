@@ -29,6 +29,8 @@ pub enum OpCode {
     Call,
     ReturnValue,
     Return,
+    SetLocal(u8),
+    GetLocal(u8)
 }
 
 impl OpCode {
@@ -93,6 +95,12 @@ impl OpCode {
             OpCode::Call => [OpCodeId::Call as u8].into(),
             OpCode::ReturnValue => [OpCodeId::ReturnValue as u8].into(),
             OpCode::Return => [OpCodeId::Return as u8].into(),
+            OpCode::SetLocal(index) => {
+                [OpCodeId::SetLocal as u8, *index].into()
+            }
+            OpCode::GetLocal(index) => {
+                [OpCodeId::GetLocal as u8, *index].into()
+            }
         }
     }
 }
@@ -124,6 +132,8 @@ pub enum OpCodeId {
     Call,
     ReturnValue,
     Return,
+    SetLocal,
+    GetLocal,
 }
 
 #[derive(PartialEq, Clone)]
@@ -206,6 +216,7 @@ pub struct InstructionsIter<'a> {
     instructions: &'a Instructions,
     pub ip: usize,
 }
+
 impl<'a> InstructionsIter<'a> {
     fn read_u8(&mut self) -> Option<u8> {
         let offset = self.ip;
@@ -305,6 +316,20 @@ impl<'a> Iterator for InstructionsIter<'a> {
             OpCodeId::Call => Some(Ok(OpCode::Call)),
             OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
             OpCodeId::Return => Some(Ok(OpCode::Return)),
+            OpCodeId::SetLocal => {
+                let index = self.read_u8();
+                match index {
+                    Some(i) => Some(Ok(OpCode::SetLocal(i))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
+            OpCodeId::GetLocal => {
+                let index = self.read_u8();
+                match index {
+                    Some(i) => Some(Ok(OpCode::GetLocal(i))),
+                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+                }
+            }
         }
     }
 }
