@@ -7,6 +7,7 @@ use thiserror::Error;
 use crate::{
     code::{InstructionReadError, Instructions, OpCode},
     compiler::Bytecode,
+    frame::Frame,
 };
 
 #[derive(Debug, Error)]
@@ -19,23 +20,6 @@ pub enum VmError {
     InstructionReadError(#[from] InstructionReadError),
     #[error("Invalid HashKey {0:?}. Only Integer, String and Boolean are valid keys")]
     InvalidHashKey(Object),
-}
-
-// TODO: Should this be iterable instead of Instructions?
-struct Frame {
-    // TODO: Why does this have a `CompiledFunction` instead of `Instructions`?
-    function: CompiledFunction,
-    ip: usize,
-}
-
-impl Frame {
-    fn new(function: CompiledFunction) -> Self {
-        Self { function, ip: 0 }
-    }
-
-    fn instructions(&self) -> &Instructions {
-        &self.function.instructions
-    }
 }
 
 pub struct Vm {
@@ -272,7 +256,12 @@ impl Vm {
                             self.frames.push(Frame {
                                 function: function.clone(),
                                 ip: 0,
+                                base_pointer: self.stack.len(),
                             });
+                            // Set aside space for locals
+                            for _ in 0..function.num_locals {
+                                self.stack.push(Object::Null);
+                            }
                             iter = self.frames.last().unwrap().instructions().iter();
                         }
                         _ => {
