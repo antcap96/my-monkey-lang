@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::object::{CompiledFunction, Object};
 use monkey_lang_core::ast::HashKey;
+use monkey_lang_interpreter::object;
 use thiserror::Error;
 
 use crate::{
@@ -273,24 +274,36 @@ impl Vm {
                     }
                 }
                 OpCode::Return => {
+                    let base_pointer = self.frames.last().unwrap().base_pointer;
                     self.frames.pop();
                     let frame = self.frames.last().unwrap();
                     let ip = frame.ip;
                     iter = frame.instructions().iter_at(ip);
-                    let _function = self.stack.pop();
+                    self.stack.drain((base_pointer - 1)..self.stack.len());
                     self.stack.push(Object::Null);
                 }
                 OpCode::ReturnValue => {
+                    let base_pointer = self.frames.last().unwrap().base_pointer;
                     let return_value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.frames.pop();
                     let frame = self.frames.last().unwrap();
                     let ip = frame.ip;
                     iter = frame.instructions().iter_at(ip);
-                    let _function = self.stack.pop();
+                    self.stack.drain((base_pointer - 1)..self.stack.len());
                     self.stack.push(return_value);
                 }
-                OpCode::SetLocal(index) => todo!(),
-                OpCode::GetLocal(index) => todo!(),
+                OpCode::SetLocal(index) => {
+                    let frame = self.frames.last().unwrap();
+                    let object_index = frame.base_pointer + index as usize;
+                    let object = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
+                    self.stack[object_index] = object;
+                }
+                OpCode::GetLocal(index) => {
+                    let frame = self.frames.last().unwrap();
+                    let object_index = frame.base_pointer + index as usize;
+                    let object = self.stack[object_index].clone();
+                    self.stack.push(object);
+                }
             }
         }
         Ok(())
@@ -606,7 +619,8 @@ mod tests {
                 Object::Integer(3),
             ),
             (
-                "let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
+                "let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+                 let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
                  oneAndTwo() + threeAndFour();",
                 Object::Integer(10),
             ),
@@ -621,11 +635,11 @@ mod tests {
                  let minusOne = fn() {
                      let num = 1;
                      globalSeed - num;
-                 }
+                 };
                  let minusTwo = fn() {
                      let num = 2;
                      globalSeed - num;
-                 }
+                 };
                  minusOne() + minusTwo();",
                 Object::Integer(97),
             ),
