@@ -64,8 +64,7 @@ impl Vm {
 
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
-        let mut iter = self.frames.last().unwrap().function.instructions.iter();
-        while let Some(op) = iter.next() {
+        while let Some(op) = self.frames.last_mut().unwrap().next() {
             let op = op?;
 
             match op {
@@ -159,22 +158,12 @@ impl Vm {
                     self.last_popped_stack_element = Some(popped);
                 }
                 OpCode::Jump(offset) => {
-                    iter = self
-                        .frames
-                        .last()
-                        .unwrap()
-                        .instructions()
-                        .iter_at(offset as usize);
+                    self.frames.last_mut().unwrap().ip = offset as usize;
                 }
                 OpCode::JumpFalse(offset) => {
                     let condition = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     if Object::Boolean(false) == condition {
-                        iter = self
-                            .frames
-                            .last()
-                            .unwrap()
-                            .instructions()
-                            .iter_at(offset as usize);
+                        self.frames.last_mut().unwrap().ip = offset as usize;
                     }
                 }
                 OpCode::Null => self.stack.push(Object::Null),
@@ -252,8 +241,6 @@ impl Vm {
                     let object = self.stack.last().ok_or(VmError::EmptyStack(op))?;
                     match object {
                         Object::CompiledFunction(function) => {
-                            let ip = iter.ip;
-                            self.frames.last_mut().map(|el| el.ip = ip);
                             self.frames.push(Frame {
                                 function: function.clone(),
                                 ip: 0,
@@ -263,7 +250,6 @@ impl Vm {
                             for _ in 0..function.num_locals {
                                 self.stack.push(Object::Null);
                             }
-                            iter = self.frames.last().unwrap().instructions().iter();
                         }
                         _ => {
                             return Err(VmError::InvalidOperation(
@@ -276,9 +262,6 @@ impl Vm {
                 OpCode::Return => {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     self.frames.pop();
-                    let frame = self.frames.last().unwrap();
-                    let ip = frame.ip;
-                    iter = frame.instructions().iter_at(ip);
                     self.stack.drain((base_pointer - 1)..self.stack.len());
                     self.stack.push(Object::Null);
                 }
@@ -286,9 +269,6 @@ impl Vm {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     let return_value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.frames.pop();
-                    let frame = self.frames.last().unwrap();
-                    let ip = frame.ip;
-                    iter = frame.instructions().iter_at(ip);
                     self.stack.drain((base_pointer - 1)..self.stack.len());
                     self.stack.push(return_value);
                 }

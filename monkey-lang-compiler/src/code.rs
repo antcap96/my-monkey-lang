@@ -30,7 +30,7 @@ pub enum OpCode {
     ReturnValue,
     Return,
     SetLocal(u8),
-    GetLocal(u8)
+    GetLocal(u8),
 }
 
 impl OpCode {
@@ -95,12 +95,8 @@ impl OpCode {
             OpCode::Call => [OpCodeId::Call as u8].into(),
             OpCode::ReturnValue => [OpCodeId::ReturnValue as u8].into(),
             OpCode::Return => [OpCodeId::Return as u8].into(),
-            OpCode::SetLocal(index) => {
-                [OpCodeId::SetLocal as u8, *index].into()
-            }
-            OpCode::GetLocal(index) => {
-                [OpCodeId::GetLocal as u8, *index].into()
-            }
+            OpCode::SetLocal(index) => [OpCodeId::SetLocal as u8, *index].into(),
+            OpCode::GetLocal(index) => [OpCodeId::GetLocal as u8, *index].into(),
         }
     }
 }
@@ -217,17 +213,11 @@ pub struct InstructionsIter<'a> {
     pub ip: usize,
 }
 
-impl<'a> InstructionsIter<'a> {
+impl<'a> InstructionIterHelper for InstructionsIter<'a> {
     fn read_u8(&mut self) -> Option<u8> {
         let offset = self.ip;
         self.ip += 1;
         self.instructions.bytes.get(offset).copied()
-    }
-
-    fn read_u16(&mut self) -> Option<u16> {
-        let b1 = self.read_u8();
-        let b2 = self.read_u8();
-        Some(u16::from_be_bytes([b1?, b2?]))
     }
 }
 
@@ -239,98 +229,113 @@ pub enum InstructionReadError {
     InvalidOpCode(u8),
 }
 
+pub trait InstructionIterHelper {
+    fn read_u8(&mut self) -> Option<u8>;
+    fn read_u16(&mut self) -> Option<u16> {
+        let b1 = self.read_u8();
+        let b2 = self.read_u8();
+        Some(u16::from_be_bytes([b1?, b2?]))
+    }
+}
+
+pub fn instruction_iter_func(
+    obj: &mut impl InstructionIterHelper,
+) -> Option<Result<OpCode, InstructionReadError>> {
+    let op = obj.read_u8()?;
+
+    let Ok(op): Result<OpCodeId, _> = op.try_into() else {
+        return Some(Err(InstructionReadError::InvalidOpCode(op)));
+    };
+
+    match op {
+        OpCodeId::Constant => {
+            let constant = obj.read_u16();
+            match constant {
+                Some(c) => Some(Ok(OpCode::Constant(c))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::Add => Some(Ok(OpCode::Add)),
+        OpCodeId::Subtract => Some(Ok(OpCode::Subtract)),
+        OpCodeId::Multiply => Some(Ok(OpCode::Multiply)),
+        OpCodeId::Divide => Some(Ok(OpCode::Divide)),
+        OpCodeId::True => Some(Ok(OpCode::True)),
+        OpCodeId::False => Some(Ok(OpCode::False)),
+        OpCodeId::Equal => Some(Ok(OpCode::Equal)),
+        OpCodeId::NotEqual => Some(Ok(OpCode::NotEqual)),
+        OpCodeId::GreaterThan => Some(Ok(OpCode::GreaterThan)),
+        OpCodeId::Minus => Some(Ok(OpCode::Minus)),
+        OpCodeId::Bang => Some(Ok(OpCode::Bang)),
+        OpCodeId::Pop => Some(Ok(OpCode::Pop)),
+        OpCodeId::Jump => {
+            let offset = obj.read_u16();
+            match offset {
+                Some(o) => Some(Ok(OpCode::Jump(o))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::JumpFalse => {
+            let offset = obj.read_u16();
+            match offset {
+                Some(o) => Some(Ok(OpCode::JumpFalse(o))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::Null => Some(Ok(OpCode::Null)),
+        OpCodeId::SetGlobal => {
+            let index = obj.read_u16();
+            match index {
+                Some(i) => Some(Ok(OpCode::SetGlobal(i))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::GetGlobal => {
+            let index = obj.read_u16();
+            match index {
+                Some(i) => Some(Ok(OpCode::GetGlobal(i))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::Array => {
+            let size = obj.read_u16();
+            match size {
+                Some(s) => Some(Ok(OpCode::Array(s))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::Hash => {
+            let size = obj.read_u16();
+            match size {
+                Some(s) => Some(Ok(OpCode::Hash(s))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::Index => Some(Ok(OpCode::Index)),
+        OpCodeId::Call => Some(Ok(OpCode::Call)),
+        OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
+        OpCodeId::Return => Some(Ok(OpCode::Return)),
+        OpCodeId::SetLocal => {
+            let index = obj.read_u8();
+            match index {
+                Some(i) => Some(Ok(OpCode::SetLocal(i))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::GetLocal => {
+            let index = obj.read_u8();
+            match index {
+                Some(i) => Some(Ok(OpCode::GetLocal(i))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+    }
+}
+
 impl<'a> Iterator for InstructionsIter<'a> {
     type Item = Result<OpCode, InstructionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let op = self.read_u8()?;
-
-        let Ok(op): Result<OpCodeId, _> = op.try_into() else {
-            return Some(Err(InstructionReadError::InvalidOpCode(op)));
-        };
-
-        match op {
-            OpCodeId::Constant => {
-                let constant = self.read_u16();
-                match constant {
-                    Some(c) => Some(Ok(OpCode::Constant(c))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::Add => Some(Ok(OpCode::Add)),
-            OpCodeId::Subtract => Some(Ok(OpCode::Subtract)),
-            OpCodeId::Multiply => Some(Ok(OpCode::Multiply)),
-            OpCodeId::Divide => Some(Ok(OpCode::Divide)),
-            OpCodeId::True => Some(Ok(OpCode::True)),
-            OpCodeId::False => Some(Ok(OpCode::False)),
-            OpCodeId::Equal => Some(Ok(OpCode::Equal)),
-            OpCodeId::NotEqual => Some(Ok(OpCode::NotEqual)),
-            OpCodeId::GreaterThan => Some(Ok(OpCode::GreaterThan)),
-            OpCodeId::Minus => Some(Ok(OpCode::Minus)),
-            OpCodeId::Bang => Some(Ok(OpCode::Bang)),
-            OpCodeId::Pop => Some(Ok(OpCode::Pop)),
-            OpCodeId::Jump => {
-                let offset = self.read_u16();
-                match offset {
-                    Some(o) => Some(Ok(OpCode::Jump(o))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::JumpFalse => {
-                let offset = self.read_u16();
-                match offset {
-                    Some(o) => Some(Ok(OpCode::JumpFalse(o))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::Null => Some(Ok(OpCode::Null)),
-            OpCodeId::SetGlobal => {
-                let index = self.read_u16();
-                match index {
-                    Some(i) => Some(Ok(OpCode::SetGlobal(i))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::GetGlobal => {
-                let index = self.read_u16();
-                match index {
-                    Some(i) => Some(Ok(OpCode::GetGlobal(i))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::Array => {
-                let size = self.read_u16();
-                match size {
-                    Some(s) => Some(Ok(OpCode::Array(s))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::Hash => {
-                let size = self.read_u16();
-                match size {
-                    Some(s) => Some(Ok(OpCode::Hash(s))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::Index => Some(Ok(OpCode::Index)),
-            OpCodeId::Call => Some(Ok(OpCode::Call)),
-            OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
-            OpCodeId::Return => Some(Ok(OpCode::Return)),
-            OpCodeId::SetLocal => {
-                let index = self.read_u8();
-                match index {
-                    Some(i) => Some(Ok(OpCode::SetLocal(i))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-            OpCodeId::GetLocal => {
-                let index = self.read_u8();
-                match index {
-                    Some(i) => Some(Ok(OpCode::GetLocal(i))),
-                    None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
-                }
-            }
-        }
+        instruction_iter_func(self)
     }
 }
 
