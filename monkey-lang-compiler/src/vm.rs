@@ -258,14 +258,14 @@ impl Vm {
                 OpCode::Return => {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     self.frames.pop();
-                    self.stack.drain((base_pointer - 1)..self.stack.len());
+                    self.stack.truncate(base_pointer - 1);
                     self.stack.push(Object::Null);
                 }
                 OpCode::ReturnValue => {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     let return_value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.frames.pop();
-                    self.stack.drain((base_pointer - 1)..self.stack.len());
+                    self.stack.truncate(base_pointer - 1);
                     self.stack.push(return_value);
                 }
                 OpCode::SetLocal(index) => {
