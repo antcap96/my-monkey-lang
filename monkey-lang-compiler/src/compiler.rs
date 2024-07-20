@@ -287,7 +287,12 @@ impl Compiler {
                 arguments,
             } => {
                 self.compile_expression(function)?;
-                self.emit(OpCode::Call);
+                self.emit(OpCode::Call(
+                    arguments
+                        .len()
+                        .try_into()
+                        .expect("Functions have a limit of 255 arguments"),
+                ));
             }
             Expression::MatchExpression { expression, cases } => todo!(),
         }
@@ -829,7 +834,7 @@ mod tests {
                         num_locals: 0,
                     }),
                 ],
-                vec![OpCode::Constant(1), OpCode::Call, OpCode::Pop],
+                vec![OpCode::Constant(1), OpCode::Call(0), OpCode::Pop],
             ),
             (
                 "
@@ -847,7 +852,7 @@ mod tests {
                     OpCode::Constant(1),
                     OpCode::SetGlobal(0),
                     OpCode::GetGlobal(0),
-                    OpCode::Call,
+                    OpCode::Call(0),
                     OpCode::Pop,
                 ],
             ),

@@ -58,10 +58,6 @@ impl Vm {
         }
     }
 
-    pub fn stack_top(&self) -> Option<Object> {
-        self.stack.last().cloned()
-    }
-
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
         while let Some(op) = self.frames.last_mut().unwrap().next() {
@@ -237,7 +233,7 @@ impl Vm {
                         }
                     }
                 }
-                OpCode::Call => {
+                OpCode::Call(n_args) => {
                     let object = self.stack.last().ok_or(VmError::EmptyStack(op))?;
                     match object {
                         Object::CompiledFunction(function) => {
@@ -253,7 +249,7 @@ impl Vm {
                         }
                         _ => {
                             return Err(VmError::InvalidOperation(
-                                OpCode::Call,
+                                OpCode::Call(n_args),
                                 vec![object.clone()],
                             ))
                         }
