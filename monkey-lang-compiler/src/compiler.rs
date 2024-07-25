@@ -239,10 +239,10 @@ impl Compiler {
                     .replace(second_jump_pos, OpCode::Jump(len));
             }
             Expression::Identifier(identifier) => {
-                let symbol = self.symbol_table.resolve(&identifier.name);
-                let Some(symbol) = symbol else {
-                    return Err(CompilationError::UnknownIdentifier(identifier.name.clone()));
-                };
+                let symbol = self
+                    .symbol_table
+                    .resolve(&identifier.name)
+                    .ok_or(CompilationError::UnknownIdentifier(identifier.name.clone()))?;
                 match symbol.scope {
                     Scope::Global => self.emit(OpCode::GetGlobal(symbol.index as u16)),
                     Scope::Local => self.emit(OpCode::GetLocal(symbol.index as u8)),
@@ -256,6 +256,9 @@ impl Compiler {
             }
             Expression::FunctionLiteral { parameters, body } => {
                 self.enter_scope();
+                for param in parameters {
+                    self.symbol_table.define(param.name.clone());
+                }
                 self.compile_block_statement(body)?;
 
                 match self.last_opcode() {
@@ -287,6 +290,9 @@ impl Compiler {
                 arguments,
             } => {
                 self.compile_expression(function)?;
+                for arg in arguments {
+                    self.compile_expression(arg)?;
+                }
                 self.emit(OpCode::Call(
                     arguments
                         .len()
@@ -853,6 +859,60 @@ mod tests {
                     OpCode::SetGlobal(0),
                     OpCode::GetGlobal(0),
                     OpCode::Call(0),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "
+                let oneArg = fn(a) { a };
+                oneArg(24);
+                ",
+                vec![
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [OpCode::GetLocal(0), OpCode::ReturnValue].into(),
+                        num_locals: 1,
+                    }),
+                    Object::Integer(24),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::GetGlobal(0),
+                    OpCode::Constant(1),
+                    OpCode::Call(1),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "
+                let manyArg = fn(a, b, c) { a; b; c };
+                manyArg(24, 25, 26);
+                ",
+                vec![
+                    Object::CompiledFunction(CompiledFunction {
+                        instructions: [
+                            OpCode::GetLocal(0),
+                            OpCode::Pop,
+                            OpCode::GetLocal(1),
+                            OpCode::Pop,
+                            OpCode::GetLocal(2),
+                            OpCode::ReturnValue,
+                        ]
+                        .into(),
+                        num_locals: 3,
+                    }),
+                    Object::Integer(24),
+                    Object::Integer(25),
+                    Object::Integer(26),
+                ],
+                vec![
+                    OpCode::Constant(0),
+                    OpCode::SetGlobal(0),
+                    OpCode::GetGlobal(0),
+                    OpCode::Constant(1),
+                    OpCode::Constant(2),
+                    OpCode::Constant(3),
+                    OpCode::Call(3),
                     OpCode::Pop,
                 ],
             ),
