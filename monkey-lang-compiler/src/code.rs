@@ -317,7 +317,7 @@ pub fn instruction_iter_func(
                 Some(n) => Some(Ok(OpCode::Call(n))),
                 None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
             }
-        },
+        }
         OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
         OpCodeId::Return => Some(Ok(OpCode::Return)),
         OpCodeId::SetLocal => {

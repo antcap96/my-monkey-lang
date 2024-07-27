@@ -234,25 +234,23 @@ impl Vm {
                     }
                 }
                 OpCode::Call(n_args) => {
-                    let object = self.stack.last().ok_or(VmError::EmptyStack(op))?;
+                    let object = self
+                        .stack
+                        .get(self.stack.len() - 1 - n_args as usize)
+                        .ok_or(VmError::EmptyStack(op.clone()))?;
                     match object {
                         Object::CompiledFunction(function) => {
                             self.frames.push(Frame {
                                 function: function.clone(),
                                 ip: 0,
-                                base_pointer: self.stack.len(),
+                                base_pointer: self.stack.len() - n_args as usize,
                             });
                             // Set aside space for locals
-                            for _ in 0..function.num_locals {
+                            for _ in 0..(function.num_locals - n_args as usize) {
                                 self.stack.push(Object::Null);
                             }
                         }
-                        _ => {
-                            return Err(VmError::InvalidOperation(
-                                OpCode::Call(n_args),
-                                vec![object.clone()],
-                            ))
-                        }
+                        _ => return Err(VmError::InvalidOperation(op, vec![object.clone()])),
                     }
                 }
                 OpCode::Return => {
@@ -618,6 +616,26 @@ mod tests {
                  };
                  minusOne() + minusTwo();",
                 Object::Integer(97),
+            ),
+        ];
+
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_calling_functions_with_arguments_and_bindings() {
+        let tests = [
+            (
+                "let identity = fn(a) { a; };
+                 identity(4)",
+                Object::Integer(4),
+            ),
+            (
+                "let sum = fn(a, b) { a + b; };
+                 sum(1, 2)",
+                Object::Integer(3),
             ),
         ];
 
