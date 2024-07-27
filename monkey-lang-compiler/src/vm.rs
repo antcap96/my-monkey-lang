@@ -58,10 +58,6 @@ impl Vm {
         }
     }
 
-    pub fn stack_top(&self) -> Option<Object> {
-        self.stack.last().cloned()
-    }
-
     // TODO: should this consume the VM?
     pub fn run(&mut self) -> Result<(), VmError> {
         while let Some(op) = self.frames.last_mut().unwrap().next() {
@@ -237,39 +233,37 @@ impl Vm {
                         }
                     }
                 }
-                OpCode::Call => {
-                    let object = self.stack.last().ok_or(VmError::EmptyStack(op))?;
+                OpCode::Call(n_args) => {
+                    let object = self
+                        .stack
+                        .get(self.stack.len() - 1 - n_args as usize)
+                        .ok_or(VmError::EmptyStack(op.clone()))?;
                     match object {
                         Object::CompiledFunction(function) => {
                             self.frames.push(Frame {
                                 function: function.clone(),
                                 ip: 0,
-                                base_pointer: self.stack.len(),
+                                base_pointer: self.stack.len() - n_args as usize,
                             });
                             // Set aside space for locals
-                            for _ in 0..function.num_locals {
+                            for _ in 0..(function.num_locals - n_args as usize) {
                                 self.stack.push(Object::Null);
                             }
                         }
-                        _ => {
-                            return Err(VmError::InvalidOperation(
-                                OpCode::Call,
-                                vec![object.clone()],
-                            ))
-                        }
+                        _ => return Err(VmError::InvalidOperation(op, vec![object.clone()])),
                     }
                 }
                 OpCode::Return => {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     self.frames.pop();
-                    self.stack.drain((base_pointer - 1)..self.stack.len());
+                    self.stack.truncate(base_pointer - 1);
                     self.stack.push(Object::Null);
                 }
                 OpCode::ReturnValue => {
                     let base_pointer = self.frames.last().unwrap().base_pointer;
                     let return_value = self.stack.pop().ok_or(VmError::EmptyStack(op.clone()))?;
                     self.frames.pop();
-                    self.stack.drain((base_pointer - 1)..self.stack.len());
+                    self.stack.truncate(base_pointer - 1);
                     self.stack.push(return_value);
                 }
                 OpCode::SetLocal(index) => {
@@ -622,6 +616,26 @@ mod tests {
                  };
                  minusOne() + minusTwo();",
                 Object::Integer(97),
+            ),
+        ];
+
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_calling_functions_with_arguments_and_bindings() {
+        let tests = [
+            (
+                "let identity = fn(a) { a; };
+                 identity(4)",
+                Object::Integer(4),
+            ),
+            (
+                "let sum = fn(a, b) { a + b; };
+                 sum(1, 2)",
+                Object::Integer(3),
             ),
         ];
 

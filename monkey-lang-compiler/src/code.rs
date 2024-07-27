@@ -26,7 +26,7 @@ pub enum OpCode {
     Array(u16),
     Hash(u16),
     Index,
-    Call,
+    Call(u8),
     ReturnValue,
     Return,
     SetLocal(u8),
@@ -92,7 +92,7 @@ impl OpCode {
                 out.into()
             }
             OpCode::Index => [OpCodeId::Index as u8].into(),
-            OpCode::Call => [OpCodeId::Call as u8].into(),
+            OpCode::Call(n_args) => [OpCodeId::Call as u8, *n_args].into(),
             OpCode::ReturnValue => [OpCodeId::ReturnValue as u8].into(),
             OpCode::Return => [OpCodeId::Return as u8].into(),
             OpCode::SetLocal(index) => [OpCodeId::SetLocal as u8, *index].into(),
@@ -311,7 +311,13 @@ pub fn instruction_iter_func(
             }
         }
         OpCodeId::Index => Some(Ok(OpCode::Index)),
-        OpCodeId::Call => Some(Ok(OpCode::Call)),
+        OpCodeId::Call => {
+            let n_args = obj.read_u8();
+            match n_args {
+                Some(n) => Some(Ok(OpCode::Call(n))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
         OpCodeId::ReturnValue => Some(Ok(OpCode::ReturnValue)),
         OpCodeId::Return => Some(Ok(OpCode::Return)),
         OpCodeId::SetLocal => {
