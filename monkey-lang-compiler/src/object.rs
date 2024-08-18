@@ -12,6 +12,7 @@ pub enum Object {
     Array(Vec<Object>),
     Hash(HashMap<ast::HashKey, (Object, Object)>),
     CompiledFunction(CompiledFunction),
+    Builtin(u8),
     Null,
 }
 
@@ -19,6 +20,7 @@ pub enum Object {
 pub struct CompiledFunction {
     pub instructions: Instructions,
     pub num_locals: usize,
+    pub num_parameters: u8,
 }
 
 impl TryFrom<Object> for ast::HashKey {

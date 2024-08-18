@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 
-use crate::object::{CompiledFunction, Object};
+use crate::{
+    builtins::BUILTINS,
+    object::{CompiledFunction, Object},
+};
 use monkey_lang_core::ast::HashKey;
-use monkey_lang_interpreter::object;
 use thiserror::Error;
 
 use crate::{
-    code::{InstructionReadError, Instructions, OpCode},
+    code::{InstructionReadError, OpCode},
     compiler::Bytecode,
     frame::Frame,
 };
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum VmError {
     #[error("Empty stack when executing opcode: {0:?}")]
     EmptyStack(OpCode),
@@ -21,6 +23,12 @@ pub enum VmError {
     InstructionReadError(#[from] InstructionReadError),
     #[error("Invalid HashKey {0:?}. Only Integer, String and Boolean are valid keys")]
     InvalidHashKey(Object),
+    #[error("Builtin Function error {0}")]
+    BuiltinFunctionError(String),
+    #[error("Undefined builtin function with index {0}")]
+    UndefinedBuiltin(u8),
+    #[error("Wrong number of arguments. Expected {expected} got {got}")]
+    WrongNumberOfArguments { expected: u8, got: u8 },
 }
 
 pub struct Vm {
@@ -41,6 +49,7 @@ impl Vm {
             frames: vec![Frame::new(CompiledFunction {
                 instructions: bytecode.instructions,
                 num_locals: 0,
+                num_parameters: 0,
             })],
         }
     }
@@ -54,6 +63,7 @@ impl Vm {
             frames: vec![Frame::new(CompiledFunction {
                 instructions: bytecode.instructions,
                 num_locals: 0,
+                num_parameters: 0,
             })],
         }
     }
@@ -240,6 +250,13 @@ impl Vm {
                         .ok_or(VmError::EmptyStack(op.clone()))?;
                     match object {
                         Object::CompiledFunction(function) => {
+                            if n_args != function.num_parameters as u8 {
+                                return Err(VmError::WrongNumberOfArguments {
+                                    expected: function.num_parameters as u8,
+                                    got: n_args,
+                                });
+                            }
+                            // TODO: Validate number of arguments somehow
                             self.frames.push(Frame {
                                 function: function.clone(),
                                 ip: 0,
@@ -249,6 +266,17 @@ impl Vm {
                             for _ in 0..(function.num_locals - n_args as usize) {
                                 self.stack.push(Object::Null);
                             }
+                        }
+                        Object::Builtin(index) => {
+                            let callable = BUILTINS
+                                .get(*index as usize)
+                                .ok_or(VmError::UndefinedBuiltin(*index))?
+                                .1;
+                            let split_at = self.stack.len() - n_args as usize - 1;
+                            let args = self.stack.split_off(split_at);
+
+                            let output = callable(&args[1..])?;
+                            self.stack.push(output);
                         }
                         _ => return Err(VmError::InvalidOperation(op, vec![object.clone()])),
                     }
@@ -278,6 +306,9 @@ impl Vm {
                     let object = self.stack[object_index].clone();
                     self.stack.push(object);
                 }
+                OpCode::GetBuiltin(index) => {
+                    self.stack.push(Object::Builtin(index));
+                }
             }
         }
         Ok(())
@@ -292,6 +323,19 @@ mod tests {
 
     use crate::compiler::Compiler;
 
+    fn validate_expression_errors(input: &str) {
+        let tokenizer = Tokenizer::new(input);
+        let mut parser = Parser::new(tokenizer);
+        let program = parser.parse_program().unwrap();
+
+        let bytecode = Compiler::new().compile(&program).unwrap();
+
+        let mut vm = Vm::new(bytecode);
+        let result = vm.run();
+
+        assert!(result.is_err())
+    }
+
     fn validate_expression(input: &str, output: Object) {
         let tokenizer = Tokenizer::new(input);
         let mut parser = Parser::new(tokenizer);
@@ -302,7 +346,8 @@ mod tests {
         let mut vm = Vm::new(bytecode);
         vm.run().expect("Error running VM");
 
-        assert_eq!(vm.last_popped_stack_element, Some(output))
+        assert_eq!(vm.last_popped_stack_element, Some(output));
+        assert_eq!(vm.stack.len(), 0);
     }
 
     #[test]
@@ -641,6 +686,48 @@ mod tests {
 
         for (input, output) in tests {
             validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        let tests = [
+            (r#"len("")"#, Object::Integer(0)),
+            (r#"len("four")"#, Object::Integer(4)),
+            (r#"len("hello world")"#, Object::Integer(11)),
+            (r#"len([1, 2, 3])"#, Object::Integer(3)),
+            (r#"len([])"#, Object::Integer(0)),
+            (
+                r#"to_string("hello world!")"#,
+                Object::String("hello world!".into()),
+            ),
+            (r#"first([1, 2, 3])"#, Object::Integer(1)),
+            (r#"first([])"#, Object::Null),
+            (r#"last([1, 2, 3])"#, Object::Integer(3)),
+            (r#"last([])"#, Object::Null),
+            (
+                r#"tail([1, 2, 3])"#,
+                Object::Array(vec![Object::Integer(2), Object::Integer(3)]),
+            ),
+            (r#"tail([])"#, Object::Array(vec![])),
+        ];
+        for (input, output) in tests {
+            validate_expression(input, output)
+        }
+    }
+
+    #[test]
+    fn test_builtin_functions_errors() {
+        let tests = [
+            r#"len(1)"#,
+            r#"len("one", "two")"#,
+            r#"first(1)"#,
+            r#"last(1)"#,
+            r#"tail(1)"#,
+        ];
+
+        for input in tests {
+            validate_expression_errors(input)
         }
     }
 }

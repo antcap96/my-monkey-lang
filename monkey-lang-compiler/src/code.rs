@@ -31,6 +31,7 @@ pub enum OpCode {
     Return,
     SetLocal(u8),
     GetLocal(u8),
+    GetBuiltin(u8),
 }
 
 impl OpCode {
@@ -97,6 +98,7 @@ impl OpCode {
             OpCode::Return => [OpCodeId::Return as u8].into(),
             OpCode::SetLocal(index) => [OpCodeId::SetLocal as u8, *index].into(),
             OpCode::GetLocal(index) => [OpCodeId::GetLocal as u8, *index].into(),
+            OpCode::GetBuiltin(index) => [OpCodeId::GetBuiltin as u8, *index].into(),
         }
     }
 }
@@ -130,6 +132,7 @@ pub enum OpCodeId {
     Return,
     SetLocal,
     GetLocal,
+    GetBuiltin,
 }
 
 #[derive(PartialEq, Clone)]
@@ -331,6 +334,13 @@ pub fn instruction_iter_func(
             let index = obj.read_u8();
             match index {
                 Some(i) => Some(Ok(OpCode::GetLocal(i))),
+                None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
+            }
+        }
+        OpCodeId::GetBuiltin => {
+            let index = obj.read_u8();
+            match index {
+                Some(i) => Some(Ok(OpCode::GetBuiltin(i))),
                 None => Some(Err(InstructionReadError::UnexpectedEndOfInstructions)),
             }
         }

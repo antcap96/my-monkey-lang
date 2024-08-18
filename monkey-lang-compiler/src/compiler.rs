@@ -1,5 +1,7 @@
+use std::error;
 use std::rc::Rc;
 
+use crate::builtins::BUILTINS;
 use crate::object::{CompiledFunction, Object};
 use crate::symbol_table::Scope;
 use crate::{
@@ -15,6 +17,8 @@ use thiserror::Error;
 pub enum CompilationError {
     #[error("Unknown identifier: {0}")]
     UnknownIdentifier(Rc<str>),
+    #[error("Functions can have at most 255 arguments, got {0}")]
+    TooManyArguments(usize),
     #[error("TODO")]
     TODO,
 }
@@ -35,12 +39,17 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn new() -> Self {
-        Compiler {
+        let mut compiler = Compiler {
             constants: Vec::new(),
             symbol_table: SymbolTable::new(),
             scopes: vec![CompilationScope::new()],
             scope_index: 0,
+        };
+
+        for (index, (name, _func)) in BUILTINS.iter().enumerate() {
+            compiler.symbol_table.define_builtin((*name).into(), index);
         }
+        compiler
     }
 
     pub fn new_with_state(constants: Vec<Object>, symbol_table: SymbolTable) -> Self {
@@ -246,6 +255,7 @@ impl Compiler {
                 match symbol.scope {
                     Scope::Global => self.emit(OpCode::GetGlobal(symbol.index as u16)),
                     Scope::Local => self.emit(OpCode::GetLocal(symbol.index as u8)),
+                    Scope::Builtin => self.emit(OpCode::GetBuiltin(symbol.index as u8)),
                 };
             }
             Expression::IndexExpression { left, index } => {
@@ -282,6 +292,10 @@ impl Compiler {
                 let id = self.add_constant(Object::CompiledFunction(CompiledFunction {
                     instructions,
                     num_locals,
+                    num_parameters: parameters
+                        .len()
+                        .try_into()
+                        .map_err(|_| CompilationError::TooManyArguments(parameters.len()))?,
                 }));
                 self.emit(OpCode::Constant(id));
             }
@@ -293,12 +307,9 @@ impl Compiler {
                 for arg in arguments {
                     self.compile_expression(arg)?;
                 }
-                self.emit(OpCode::Call(
-                    arguments
-                        .len()
-                        .try_into()
-                        .expect("Functions have a limit of 255 arguments"),
-                ));
+                self.emit(OpCode::Call(arguments.len().try_into().map_err(|_| {
+                    CompilationError::TooManyArguments(arguments.len())
+                })?));
             }
             Expression::MatchExpression { expression, cases } => todo!(),
         }
@@ -330,6 +341,7 @@ impl Compiler {
                 let index = symbol.index;
                 self.emit(OpCode::SetLocal(index as u8))
             }
+            Scope::Builtin => panic!("Trying to define a builtin"),
         };
 
         Ok(())
@@ -799,6 +811,7 @@ mod tests {
                         ]
                         .into(),
                         num_locals: 0,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![OpCode::Constant(2), OpCode::Pop],
@@ -817,6 +830,7 @@ mod tests {
                         ]
                         .into(),
                         num_locals: 0,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![OpCode::Constant(2), OpCode::Pop],
@@ -838,6 +852,7 @@ mod tests {
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
                         num_locals: 0,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![OpCode::Constant(1), OpCode::Call(0), OpCode::Pop],
@@ -852,6 +867,7 @@ mod tests {
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::Constant(0), OpCode::ReturnValue].into(),
                         num_locals: 0,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![
@@ -871,6 +887,7 @@ mod tests {
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::GetLocal(0), OpCode::ReturnValue].into(),
                         num_locals: 1,
+                        num_parameters: 1,
                     }),
                     Object::Integer(24),
                 ],
@@ -900,6 +917,7 @@ mod tests {
                         ]
                         .into(),
                         num_locals: 3,
+                        num_parameters: 3,
                     }),
                     Object::Integer(24),
                     Object::Integer(25),
@@ -933,6 +951,7 @@ mod tests {
                     Object::CompiledFunction(CompiledFunction {
                         instructions: [OpCode::GetGlobal(0), OpCode::ReturnValue].into(),
                         num_locals: 0,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![
@@ -959,6 +978,7 @@ mod tests {
                         ]
                         .into(),
                         num_locals: 1,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![OpCode::Constant(1), OpCode::Pop],
@@ -986,9 +1006,51 @@ mod tests {
                         ]
                         .into(),
                         num_locals: 2,
+                        num_parameters: 0,
                     }),
                 ],
                 vec![OpCode::Constant(2), OpCode::Pop],
+            ),
+        ];
+
+        for (input, constants, instructions) in tests {
+            validate_expression(input, constants, instructions);
+        }
+    }
+
+    #[test]
+    fn test_builtins() {
+        let tests = [
+            (
+                "len([]);
+                 push([], 1);",
+                vec![Object::Integer(1)],
+                vec![
+                    OpCode::GetBuiltin(0),
+                    OpCode::Array(0),
+                    OpCode::Call(1),
+                    OpCode::Pop,
+                    OpCode::GetBuiltin(5),
+                    OpCode::Array(0),
+                    OpCode::Constant(0),
+                    OpCode::Call(2),
+                    OpCode::Pop,
+                ],
+            ),
+            (
+                "fn() { len([]) }",
+                vec![Object::CompiledFunction(CompiledFunction {
+                    instructions: [
+                        OpCode::GetBuiltin(0),
+                        OpCode::Array(0),
+                        OpCode::Call(1),
+                        OpCode::ReturnValue,
+                    ]
+                    .into(),
+                    num_locals: 0,
+                    num_parameters: 0,
+                })],
+                vec![OpCode::Constant(0), OpCode::Pop],
             ),
         ];
 
