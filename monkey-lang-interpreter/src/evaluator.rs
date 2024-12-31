@@ -631,18 +631,21 @@ mod tests {
     fn test_match_expression() {
         let inputs = vec![
             ("match true {true=>{1}}", Ok(Object::integer(1))),
-            ("match false {true=>{1} false=>{2}}", Ok(Object::integer(2))),
+            (
+                "match false {true=>{1}, false=>{2}}",
+                Ok(Object::integer(2)),
+            ),
             (
                 r#"match "asd" {a => {a}}"#,
                 Ok(Object::string("asd".to_owned())),
             ),
             (
                 r#"match 5 {
-                    true => {1}
-                    2 => {2}
-                    "asd" => {3}
-                    5 => {4}
-                    null => {5}
+                    true => {1},
+                    2 => {2},
+                    "asd" => {3},
+                    5 => {4},
+                    null => {5},
                 }"#,
                 Ok(Object::integer(4)),
             ),

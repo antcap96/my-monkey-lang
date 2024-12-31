@@ -136,9 +136,9 @@ impl Display for ReturnStatement {
 
 impl Display for BlockStatement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{{")?;
+        write!(f, "{{")?;
         for statement in &self.statements {
-            writeln!(f, "  {}", statement)?;
+            write!(f, "{}", statement)?;
         }
         write!(f, "}}")
     }
@@ -218,7 +218,10 @@ impl Display for Expression {
             IndexExpression { left, index } => write!(f, "({}[{}])", left, index),
             MatchExpression { expression, cases } => {
                 write!(f, "match {} {{", expression)?;
-                for case in cases {
+                for (i, case) in cases.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", case)?;
                 }
                 write!(f, "}}")

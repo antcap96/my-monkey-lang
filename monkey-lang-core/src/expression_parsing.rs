@@ -1,4 +1,4 @@
-use crate::ast::{BlockStatement, Expression};
+use crate::ast::{BlockStatement, Expression, Identifier};
 use crate::lexer::{Token, TokenKind};
 use crate::parser::{Expected, ParseError, Parser};
 
@@ -34,148 +34,94 @@ fn prefix_operation(
     kind: crate::ast::PrefixOperationKind,
 ) -> impl FnOnce(&mut Parser) -> Result<Expression, ParseError> {
     move |parser| {
-        let next_token = parser
-            .iter
-            .next()
-            .ok_or(ParseError::premature_end_expected_expression())?;
         Ok(Expression::PrefixOperation(
             kind,
-            Box::new(parser.parse_expression(Precedence::Prefix, next_token)?),
+            Box::new(parser.parse_expression(Precedence::Prefix)?),
         ))
     }
 }
 
 fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let next_token = parser
-        .iter
-        .next()
-        .ok_or(ParseError::premature_end_expected_expression())?;
+    let expression = parser.parse_expression(Precedence::Lowest)?;
+    parser.expect_token(TokenKind::RParen)?;
 
-    let expression = parser.parse_expression(Precedence::Lowest, next_token)?;
-
-    match parser.iter.next() {
-        Some(Token {
-            kind: TokenKind::RParen,
-            ..
-        }) => Ok(expression),
-        next => Err(ParseError::unexpected_token(TokenKind::RParen, next)),
-    }
+    Ok(expression)
 }
 
-fn parse_expression_list(
+fn parse_sequence<T>(
     parser: &mut Parser,
+    parse_element: impl Fn(&mut Parser) -> Result<T, ParseError>,
+    separator: TokenKind,
     terminator: TokenKind,
-) -> Result<Vec<Expression>, ParseError> {
+) -> Result<Vec<T>, ParseError> {
     let mut elements = Vec::new();
 
     loop {
-        match parser.iter.next() {
-            Some(next) if next.kind == terminator => return Ok(elements),
-            Some(next) => {
-                elements.push(parser.parse_expression(Precedence::Lowest, next)?);
+        match parser.iter.peek() {
+            Some(next) if next.kind == terminator => {
+                parser.iter.next();
+                return Ok(elements);
             }
-            None => return Err(ParseError::premature_end_expected_expression()),
+            None => {
+                return Err(ParseError::PrematureEndOfInput {
+                    expected: Expected::Token(terminator),
+                })
+            }
+            _ => {
+                elements.push(parse_element(parser)?);
+            }
         }
 
         match parser.iter.next() {
-            Some(Token {
-                kind: TokenKind::Comma,
-                ..
-            }) => {}
+            Some(next) if next.kind == separator => continue,
             Some(next) if next.kind == terminator => return Ok(elements),
-            next => return Err(ParseError::unexpected_token(terminator, next)),
+            next => return Err(ParseError::unexpected_token(separator, next)),
         }
     }
 }
 
 fn parse_array_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let expressions = parse_expression_list(parser, TokenKind::RBracket)?;
+    let expressions = parse_sequence(
+        parser,
+        |parser| parser.parse_expression(Precedence::Lowest),
+        TokenKind::Comma,
+        TokenKind::RBracket,
+    )?;
     Ok(Expression::ArrayLiteral(expressions))
 }
 
 fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let mut pairs = Vec::new();
-
-    loop {
-        let next = parser.iter.next();
-        let key = match next {
-            Some(Token {
-                kind: TokenKind::RBrace,
-                ..
-            }) => return Ok(Expression::HashLiteral(pairs)),
-            None => {
-                return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(TokenKind::RBrace),
-                })
-            }
-            Some(token) => parser.parse_expression(Precedence::Lowest, token)?,
-        };
-
-        let next = parser.iter.next();
-        let Some(Token {
-            kind: TokenKind::Colon,
-            ..
-        }) = next
-        else {
-            return Err(ParseError::unexpected_token(TokenKind::Colon, next));
-        };
-
-        let Some(next) = parser.iter.next() else {
-            return Err(ParseError::premature_end_expected_expression());
-        };
-        let value = parser.parse_expression(Precedence::Lowest, next)?;
-
-        pairs.push((key, value));
-
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::Comma,
-                ..
-            }) => {}
-            Some(Token {
-                kind: TokenKind::RBrace,
-                ..
-            }) => return Ok(Expression::HashLiteral(pairs)),
-            next => return Err(ParseError::unexpected_token(TokenKind::RBrace, next)),
-        }
-    }
+    let pairs = parse_sequence(
+        parser,
+        |parser| {
+            let key = parser.parse_expression(Precedence::Lowest)?;
+            parser.expect_token(TokenKind::Colon)?;
+            let value = parser.parse_expression(Precedence::Lowest)?;
+            return Ok((key, value));
+        },
+        TokenKind::Comma,
+        TokenKind::RBrace,
+    )?;
+    Ok(Expression::HashLiteral(pairs))
 }
 
 fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let token = parser
-        .iter
-        .next()
-        .ok_or(ParseError::premature_end_expected_expression())?;
-    let condition = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
-    let mut alternative = None;
+    let condition = Box::new(parser.parse_expression(Precedence::Lowest)?);
 
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::LBrace,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::LBrace, next));
-    };
+    parser.expect_token(TokenKind::LBrace)?;
 
     let consequence = parse_block_statement(parser)?;
 
-    if parser
+    let alternative = if parser
         .iter
         .next_if(|token| token.kind == TokenKind::Else)
         .is_some()
     {
-        let next = parser.iter.next();
-        let Some(Token {
-            kind: TokenKind::LBrace,
-            ..
-        }) = next
-        else {
-            return Err(ParseError::unexpected_token(TokenKind::LBrace, next));
-        };
-        alternative = Some(parse_block_statement(parser)?);
-    }
+        parser.expect_token(TokenKind::LBrace)?;
+        Some(parse_block_statement(parser)?)
+    } else {
+        None
+    };
 
     Ok(Expression::IfExpression {
         condition,
@@ -185,158 +131,56 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
 }
 
 fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseError> {
-    let mut statements = Vec::new();
-
-    loop {
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::RBrace,
-                ..
-            }) => return Ok(BlockStatement { statements }),
-            None => {
-                return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(TokenKind::RBrace),
-                })
-            }
-            Some(token) => {
-                let statement = parser.parse_statement(token)?;
-                statements.push(statement);
-            }
-        }
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::SemiColon,
-                ..
-            }) => continue,
-            Some(Token {
-                kind: TokenKind::RBrace,
-                ..
-            }) => return Ok(BlockStatement { statements }),
-            _ => return Err(ParseError::unexpected_token(TokenKind::RBrace, next)),
-        }
-    }
+    let statements = parse_sequence(
+        parser,
+        |parser| parser.parse_statement(),
+        TokenKind::SemiColon,
+        TokenKind::RBrace,
+    )?;
+    Ok(BlockStatement { statements })
 }
 
 fn parse_function_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::LParen,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::LParen, next));
-    };
-
+    parser.expect_token(TokenKind::LParen)?;
     let parameters = parse_parameters(parser)?;
 
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::LBrace,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::LBrace, next));
-    };
-
+    parser.expect_token(TokenKind::LBrace)?;
     let body = parse_block_statement(parser)?;
 
     Ok(Expression::FunctionLiteral { parameters, body })
 }
 
 fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, ParseError> {
-    let mut identifiers = Vec::new();
+    let identifiers = parse_sequence(
+        parser,
+        |parser| parser.parse_ident().map(|name| Identifier { name }),
+        TokenKind::Comma,
+        TokenKind::RParen,
+    )?;
 
-    loop {
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::Ident(name),
-                ..
-            }) => identifiers.push(crate::ast::Identifier { name }),
-            Some(Token {
-                kind: TokenKind::RParen,
-                ..
-            }) => return Ok(identifiers), // empty parameter list or tailing comma
-            _ => Err(ParseError::unexpected_token(TokenKind::RParen, next))?,
-        }
-
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::Comma,
-                ..
-            }) => continue,
-            Some(Token {
-                kind: TokenKind::RParen,
-                ..
-            }) => return Ok(identifiers),
-            _ => Err(ParseError::unexpected_token(TokenKind::RParen, next))?,
-        }
-    }
+    Ok(identifiers)
 }
 
 fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let Some(token) = parser.iter.next() else {
-        return Err(ParseError::premature_end_expected_expression());
-    };
-    let expression = Box::new(parser.parse_expression(Precedence::Lowest, token)?);
+    let expression = Box::new(parser.parse_expression(Precedence::Lowest)?);
 
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::LBrace,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::LBrace, next));
-    };
+    parser.expect_token(TokenKind::LBrace)?;
 
-    let mut cases = Vec::new();
+    let cases = parse_sequence(
+        parser,
+        parse_match_case,
+        TokenKind::Comma,
+        TokenKind::RBrace,
+    )?;
 
-    loop {
-        let next = parser.iter.next();
-        match next {
-            Some(Token {
-                kind: TokenKind::RBrace,
-                ..
-            }) => return Ok(Expression::MatchExpression { expression, cases }),
-            None => {
-                return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(TokenKind::RBrace),
-                })
-            }
-            Some(token) => {
-                let case = parse_match_case(parser, token)?;
-                cases.push(case);
-            }
-        }
-    }
+    return Ok(Expression::MatchExpression { expression, cases });
 }
 
-fn parse_match_case(
-    parser: &mut Parser,
-    token: Token,
-) -> Result<crate::ast::MatchCase, ParseError> {
-    let pattern = parser.parse_pattern(token)?;
+fn parse_match_case(parser: &mut Parser) -> Result<crate::ast::MatchCase, ParseError> {
+    let pattern = parser.parse_pattern()?;
 
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::FatArrow,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::FatArrow, next));
-    };
-
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::LBrace,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::LBrace, next));
-    };
+    parser.expect_token(TokenKind::FatArrow)?;
+    parser.expect_token(TokenKind::LBrace)?;
 
     let body = parse_block_statement(parser)?;
 
@@ -370,21 +214,22 @@ fn infix_operation(token: TokenKind, kind: crate::ast::InfixOperationKind) -> In
         move |left: Expression, parser: &mut Parser| -> Result<Expression, ParseError> {
             let new_precedence = precedence(&token);
 
-            let new_token = parser
-                .iter
-                .next()
-                .ok_or(ParseError::premature_end_expected_expression())?;
             Ok(Expression::InfixOperation(
                 kind,
                 Box::new(left),
-                Box::new(parser.parse_expression(new_precedence, new_token)?),
+                Box::new(parser.parse_expression(new_precedence)?),
             ))
         },
     )
 }
 
 fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
-    let arguments = parse_expression_list(parser, TokenKind::RParen)?;
+    let arguments = parse_sequence(
+        parser,
+        |parser| parser.parse_expression(Precedence::Lowest),
+        TokenKind::Comma,
+        TokenKind::RParen,
+    )?;
 
     Ok(Expression::CallExpression {
         function: Box::new(left),
@@ -393,20 +238,8 @@ fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expressi
 }
 
 fn parse_index_expression(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
-    let next = parser
-        .iter
-        .next()
-        .ok_or(ParseError::premature_end_expected_expression())?;
-    let index = parser.parse_expression(Precedence::Lowest, next)?;
-
-    let next = parser.iter.next();
-    let Some(Token {
-        kind: TokenKind::RBracket,
-        ..
-    }) = next
-    else {
-        return Err(ParseError::unexpected_token(TokenKind::RBracket, next));
-    };
+    let index = parser.parse_expression(Precedence::Lowest)?;
+    parser.expect_token(TokenKind::RBracket)?;
 
     Ok(Expression::IndexExpression {
         left: Box::new(left),

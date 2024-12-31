@@ -65,14 +65,33 @@ impl<'a> Parser<'a> {
         Self { iter }
     }
 
+    pub(crate) fn parse_ident(&mut self) -> Result<std::rc::Rc<str>, ParseError> {
+        let token = self.iter.next();
+        match token {
+            Some(Token {
+                kind: TokenKind::Ident(name),
+                ..
+            }) => Ok(name),
+            _ => Err(ParseError::unexpected_other(Expected::Identifier, token)),
+        }
+    }
+
+    pub(crate) fn expect_token(&mut self, token_kind: TokenKind) -> Result<(), ParseError> {
+        let token = self.iter.next();
+        match token {
+            Some(Token { kind, .. }) if kind == token_kind => Ok(()),
+            _ => Err(ParseError::unexpected_token(token_kind, token)),
+        }
+    }
+
     pub fn parse_program(&mut self) -> Result<crate::ast::Program, Vec<ParseError>> {
         let mut statements = Vec::new();
 
         let mut errors = Vec::new();
 
         // XXX: would some like this be possible? `for token in self.iter.by_ref() {`
-        while let Some(token) = self.iter.next() {
-            match self.parse_statement(token) {
+        while self.iter.peek().is_some() {
+            match self.parse_statement() {
                 Ok(statement) => {
                     statements.push(statement);
                 }
@@ -110,40 +129,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_statement(&mut self, token: Token) -> Result<crate::ast::Statement, ParseError> {
-        match token.kind {
-            TokenKind::Let => Ok(Statement::Let(self.parse_let_statement()?)),
-            TokenKind::Return => Ok(Statement::Return(self.parse_return_statement()?)),
-            _ => Ok(Statement::Expression(
-                self.parse_expression_statement(token)?,
-            )),
+    pub fn parse_statement(&mut self) -> Result<crate::ast::Statement, ParseError> {
+        let token = self.iter.peek();
+        match token.map(|t| &t.kind) {
+            Some(TokenKind::Let) => Ok(Statement::Let(self.parse_let_statement()?)),
+            Some(TokenKind::Return) => Ok(Statement::Return(self.parse_return_statement()?)),
+            _ => Ok(Statement::Expression(self.parse_expression_statement()?)),
         }
     }
 
     fn parse_let_statement(&mut self) -> Result<crate::ast::LetStatement, ParseError> {
-        let next = self.iter.next();
-        let Some(Token {
-            kind: TokenKind::Ident(name),
-            ..
-        }) = next
-        else {
-            return Err(ParseError::unexpected_other(Expected::Identifier, next));
-        };
-
-        let next = self.iter.next();
-        let Some(Token {
-            kind: TokenKind::Assign,
-            ..
-        }) = next
-        else {
-            return Err(ParseError::unexpected_token(TokenKind::Assign, next));
-        };
-
-        let next = self
-            .iter
-            .next()
-            .ok_or(ParseError::premature_end_expected_expression())?;
-        let value = self.parse_expression(Precedence::Lowest, next)?;
+        self.expect_token(TokenKind::Let)?;
+        let name = self.parse_ident()?;
+        self.expect_token(TokenKind::Assign)?;
+        let value = self.parse_expression(Precedence::Lowest)?;
 
         Ok(crate::ast::LetStatement {
             identifier: Identifier { name },
@@ -152,26 +151,22 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) -> Result<crate::ast::ReturnStatement, ParseError> {
-        let next = self
-            .iter
-            .next()
-            .ok_or(ParseError::premature_end_expected_expression())?;
-        let value = self.parse_expression(Precedence::Lowest, next)?;
+        self.expect_token(TokenKind::Return)?;
+        let value = self.parse_expression(Precedence::Lowest)?;
 
         Ok(crate::ast::ReturnStatement { value })
     }
-    fn parse_expression_statement(
-        &mut self,
-        token: Token,
-    ) -> Result<crate::ast::Expression, ParseError> {
-        self.parse_expression(Precedence::Lowest, token)
+    fn parse_expression_statement(&mut self) -> Result<crate::ast::Expression, ParseError> {
+        self.parse_expression(Precedence::Lowest)
     }
 
     pub fn parse_expression(
         &mut self,
         precedence: Precedence,
-        token: Token, // consider taking an Option<Token> instead, and returning an error if it's None
     ) -> Result<crate::ast::Expression, ParseError> {
+        let Some(token) = self.iter.next() else {
+            return Err(ParseError::premature_end_expected_expression());
+        };
         let mut left_expression = crate::expression_parsing::prefix_parsing(token, self)?;
 
         loop {
@@ -200,7 +195,12 @@ impl<'a> Parser<'a> {
         Ok(left_expression)
     }
 
-    pub fn parse_pattern(&mut self, token: Token) -> Result<Pattern, ParseError> {
+    pub fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
+        let Some(token) = self.iter.next() else {
+            return Err(ParseError::PrematureEndOfInput {
+                expected: Expected::Pattern,
+            });
+        };
         match token.kind {
             TokenKind::Ident(ident) => {
                 Ok(Pattern::Identifier(crate::ast::Identifier { name: ident }))
@@ -221,43 +221,20 @@ impl<'a> Parser<'a> {
         let mut remainder = None;
 
         loop {
-            match self.iter.next() {
-                Some(Token {
-                    kind: TokenKind::RBracket,
-                    ..
-                }) => break,
-                Some(Token {
-                    kind: TokenKind::Ellipsis,
-                    ..
-                }) => {
-                    let next = self.iter.next();
-                    let Some(Token {
-                        kind: TokenKind::Ident(ident),
-                        ..
-                    }) = next
-                    else {
-                        return Err(ParseError::unexpected_other(Expected::Identifier, next));
-                    };
-                    remainder = Some(crate::ast::Identifier { name: ident });
-
-                    let next = self.iter.next();
-                    let Some(Token {
-                        kind: TokenKind::RBracket,
-                        ..
-                    }) = next
-                    else {
-                        return Err(ParseError::unexpected_token(TokenKind::RBracket, next));
-                    };
+            match self.iter.peek().map(|t| &t.kind) {
+                Some(TokenKind::RBracket) => {
+                    self.iter.next();
                     break;
                 }
-                Some(next) => {
-                    contents.push(self.parse_pattern(next)?);
+                Some(TokenKind::Ellipsis) => {
+                    self.iter.next();
+                    let name = self.parse_ident()?;
+                    remainder = Some(crate::ast::Identifier { name });
+
+                    self.expect_token(TokenKind::RBracket)?;
+                    break;
                 }
-                None => {
-                    return Err(ParseError::PrematureEndOfInput {
-                        expected: Expected::Pattern,
-                    })
-                }
+                _ => contents.push(self.parse_pattern()?),
             }
 
             match self.iter.next() {
@@ -286,36 +263,26 @@ impl<'a> Parser<'a> {
         let mut remainder = None;
 
         loop {
-            match self.iter.next() {
+            match self.iter.peek() {
                 Some(Token {
                     kind: TokenKind::RBrace,
                     ..
-                }) => break,
+                }) => {
+                    self.iter.next();
+                    break;
+                }
                 Some(Token {
                     kind: TokenKind::Ellipsis,
                     ..
                 }) => {
-                    let next = self.iter.next();
-                    let Some(Token {
-                        kind: TokenKind::Ident(ident),
-                        ..
-                    }) = next
-                    else {
-                        return Err(ParseError::unexpected_other(Expected::Identifier, next));
-                    };
-                    remainder = Some(crate::ast::Identifier { name: ident });
-
-                    let next = self.iter.next();
-                    let Some(Token {
-                        kind: TokenKind::RBrace,
-                        ..
-                    }) = next
-                    else {
-                        return Err(ParseError::unexpected_token(TokenKind::RBrace, next));
-                    };
+                    self.iter.next();
+                    let name = self.parse_ident()?;
+                    remainder = Some(crate::ast::Identifier { name });
+                    self.expect_token(TokenKind::RBrace)?;
                     break;
                 }
-                Some(next) => {
+                Some(_) => {
+                    let next = self.iter.next().expect("peeked");
                     //1. parse key literal
                     let key = match next.kind {
                         TokenKind::Int(val) => crate::ast::HashKey::Integer(val.parse()?),
@@ -328,23 +295,10 @@ impl<'a> Parser<'a> {
                     };
 
                     //2. consume colon
-                    let next = self.iter.next();
-                    let Some(Token {
-                        kind: TokenKind::Colon,
-                        ..
-                    }) = next
-                    else {
-                        return Err(ParseError::unexpected_token(TokenKind::Colon, next));
-                    };
+                    self.expect_token(TokenKind::Colon)?;
 
                     //3. parse value
-                    let maybe_next = self.iter.next();
-                    let Some(next) = maybe_next else {
-                        return Err(ParseError::PrematureEndOfInput {
-                            expected: Expected::Pattern,
-                        });
-                    };
-                    let value = self.parse_pattern(next)?;
+                    let value = self.parse_pattern()?;
                     contents.push((key, value));
                 }
                 None => {
@@ -458,10 +412,10 @@ mod tests {
     #[test]
     fn test_conditional() {
         let tests = vec![
-            ("if (x < y) { x }", "if (x < y) {\n  x;\n};\n"),
+            ("if (x < y) { x }", "if (x < y) {x;};\n"),
             (
                 "if (x < y) { x } else { y }",
-                "if (x < y) {\n  x;\n} else {\n  y;\n};\n",
+                "if (x < y) {x;} else {y;};\n",
             ),
         ];
 
@@ -473,11 +427,29 @@ mod tests {
         let tests = vec![
             (
                 "let getName = fn(person) { person[\"name\"]; };",
-                "let getName = fn(person) {\n  (person[\"name\"]);\n};\n",
+                "let getName = fn(person) {(person[\"name\"]);};\n",
             ),
             (
                 "let getName = fn(person) { person[\"name\"] };",
-                "let getName = fn(person) {\n  (person[\"name\"]);\n};\n",
+                "let getName = fn(person) {(person[\"name\"]);};\n",
+            ),
+        ];
+
+        test_parsing(tests)
+    }
+
+    #[test]
+    fn test_match_expression() {
+        let tests = vec![
+            ("match 1 {};\n", "match 1 {};\n"),
+            ("match 1 {1 => {1}};", "match 1 {1 => {1;}};\n"),
+            (
+                "match 1 {1 => {1}, 2 => {2}};",
+                "match 1 {1 => {1;}, 2 => {2;}};\n",
+            ),
+            (
+                "match 1 {1 => {1}, 2 => {2},};",
+                "match 1 {1 => {1;}, 2 => {2;}};\n",
             ),
         ];
 
