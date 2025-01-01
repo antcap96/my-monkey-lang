@@ -4,7 +4,7 @@ pub mod pattern_matching;
 pub mod statements;
 
 use crate::lexer::{Token, TokenKind};
-use error::ParseError;
+pub use error::ParseError;
 use statements::parse_statement;
 
 pub struct Parser<'a> {
