@@ -1,6 +1,10 @@
+use super::error;
+use super::error::ParseError;
+use super::pattern_matching::parse_pattern;
+use super::statements::parse_statement;
 use crate::ast::{BlockStatement, Expression, Identifier};
 use crate::lexer::{Token, TokenKind};
-use crate::parser::{Expected, ParseError, Parser};
+use crate::parser::Parser;
 
 #[derive(PartialOrd, PartialEq, Debug)]
 pub enum Precedence {
@@ -14,7 +18,7 @@ pub enum Precedence {
     Index,
 }
 
-pub fn precedence(token: &TokenKind) -> Precedence {
+pub fn precedence_of(token: &TokenKind) -> Precedence {
     match token {
         TokenKind::Equal => Precedence::Equals,
         TokenKind::NotEqual => Precedence::Equals,
@@ -30,19 +34,52 @@ pub fn precedence(token: &TokenKind) -> Precedence {
     }
 }
 
+pub fn parse_expression(
+    parser: &mut Parser,
+    precedence: Precedence,
+) -> Result<crate::ast::Expression, ParseError> {
+    let Some(token) = parser.iter.next() else {
+        return Err(ParseError::premature_end_expected_expression());
+    };
+    let mut left_expression = prefix_parsing(token, parser)?;
+
+    loop {
+        let Some(next_token) = parser.iter.peek() else {
+            break;
+        };
+
+        //TODO: do i need statement_ended? SemiColon would have Precedence::Lowest
+        let statement_ended = next_token.kind == TokenKind::SemiColon;
+        let next_precedence = precedence_of(&next_token.kind);
+        if statement_ended || precedence >= next_precedence {
+            break;
+        }
+
+        let Some(next_token) = parser.iter.next() else {
+            break;
+        };
+        let Some(infix_parse_function) = infix_parsing_function(next_token.kind) else {
+            break;
+        };
+        left_expression = infix_parse_function(left_expression, parser)?;
+    }
+
+    Ok(left_expression)
+}
+
 fn prefix_operation(
     kind: crate::ast::PrefixOperationKind,
 ) -> impl FnOnce(&mut Parser) -> Result<Expression, ParseError> {
     move |parser| {
         Ok(Expression::PrefixOperation(
             kind,
-            Box::new(parser.parse_expression(Precedence::Prefix)?),
+            Box::new(parse_expression(parser, Precedence::Prefix)?),
         ))
     }
 }
 
 fn parse_grouped_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let expression = parser.parse_expression(Precedence::Lowest)?;
+    let expression = parse_expression(parser, Precedence::Lowest)?;
     parser.expect_token(TokenKind::RParen)?;
 
     Ok(expression)
@@ -64,7 +101,7 @@ fn parse_sequence<T>(
             }
             None => {
                 return Err(ParseError::PrematureEndOfInput {
-                    expected: Expected::Token(terminator),
+                    expected: error::Expected::Token(terminator),
                 })
             }
             _ => {
@@ -83,7 +120,7 @@ fn parse_sequence<T>(
 fn parse_array_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
     let expressions = parse_sequence(
         parser,
-        |parser| parser.parse_expression(Precedence::Lowest),
+        |parser| parse_expression(parser, Precedence::Lowest),
         TokenKind::Comma,
         TokenKind::RBracket,
     )?;
@@ -94,9 +131,9 @@ fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
     let pairs = parse_sequence(
         parser,
         |parser| {
-            let key = parser.parse_expression(Precedence::Lowest)?;
+            let key = parse_expression(parser, Precedence::Lowest)?;
             parser.expect_token(TokenKind::Colon)?;
-            let value = parser.parse_expression(Precedence::Lowest)?;
+            let value = parse_expression(parser, Precedence::Lowest)?;
             return Ok((key, value));
         },
         TokenKind::Comma,
@@ -106,7 +143,7 @@ fn parse_hash_literal(parser: &mut Parser) -> Result<Expression, ParseError> {
 }
 
 fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let condition = Box::new(parser.parse_expression(Precedence::Lowest)?);
+    let condition = Box::new(parse_expression(parser, Precedence::Lowest)?);
 
     parser.expect_token(TokenKind::LBrace)?;
 
@@ -133,7 +170,7 @@ fn parse_if_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
 fn parse_block_statement(parser: &mut Parser) -> Result<BlockStatement, ParseError> {
     let statements = parse_sequence(
         parser,
-        |parser| parser.parse_statement(),
+        parse_statement,
         TokenKind::SemiColon,
         TokenKind::RBrace,
     )?;
@@ -162,7 +199,7 @@ fn parse_parameters(parser: &mut Parser) -> Result<Vec<crate::ast::Identifier>, 
 }
 
 fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError> {
-    let expression = Box::new(parser.parse_expression(Precedence::Lowest)?);
+    let expression = Box::new(parse_expression(parser, Precedence::Lowest)?);
 
     parser.expect_token(TokenKind::LBrace)?;
 
@@ -177,7 +214,7 @@ fn parse_match_expression(parser: &mut Parser) -> Result<Expression, ParseError>
 }
 
 fn parse_match_case(parser: &mut Parser) -> Result<crate::ast::MatchCase, ParseError> {
-    let pattern = parser.parse_pattern()?;
+    let pattern = parse_pattern(parser)?;
 
     parser.expect_token(TokenKind::FatArrow)?;
     parser.expect_token(TokenKind::LBrace)?;
@@ -212,12 +249,12 @@ type InfixFunction = Box<dyn FnOnce(Expression, &mut Parser) -> Result<Expressio
 fn infix_operation(token: TokenKind, kind: crate::ast::InfixOperationKind) -> InfixFunction {
     Box::new(
         move |left: Expression, parser: &mut Parser| -> Result<Expression, ParseError> {
-            let new_precedence = precedence(&token);
+            let new_precedence = precedence_of(&token);
 
             Ok(Expression::InfixOperation(
                 kind,
                 Box::new(left),
-                Box::new(parser.parse_expression(new_precedence)?),
+                Box::new(parse_expression(parser, new_precedence)?),
             ))
         },
     )
@@ -226,7 +263,7 @@ fn infix_operation(token: TokenKind, kind: crate::ast::InfixOperationKind) -> In
 fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
     let arguments = parse_sequence(
         parser,
-        |parser| parser.parse_expression(Precedence::Lowest),
+        |parser| parse_expression(parser, Precedence::Lowest),
         TokenKind::Comma,
         TokenKind::RParen,
     )?;
@@ -238,7 +275,7 @@ fn parse_call_function(left: Expression, parser: &mut Parser) -> Result<Expressi
 }
 
 fn parse_index_expression(left: Expression, parser: &mut Parser) -> Result<Expression, ParseError> {
-    let index = parser.parse_expression(Precedence::Lowest)?;
+    let index = parse_expression(parser, Precedence::Lowest)?;
     parser.expect_token(TokenKind::RBracket)?;
 
     Ok(Expression::IndexExpression {
